@@ -1,0 +1,116 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/600.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 33% 98%;
+    --foreground: 218 40% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 218 40% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 218 40% 14%;
+    --primary: 213 52% 24%;
+    --primary-foreground: 40 33% 98%;
+    --secondary: 214 32% 94%;
+    --secondary-foreground: 218 40% 18%;
+    --muted: 40 18% 94%;
+    --muted-foreground: 217 14% 40%;
+    --accent: 214 40% 92%;
+    --accent-foreground: 218 40% 16%;
+    --destructive: 0 68% 46%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 35 14% 85%;
+    --input: 35 14% 80%;
+    --ring: 213 60% 40%;
+    --radius: 0.6rem;
+    /* Colores semánticos del laboratorio */
+    --dp: 256 52% 50%;
+    --fl: 174 62% 30%;
+    --warn: 32 90% 42%;
+    --ok: 145 55% 32%;
+    --chart-1: 213 60% 42%;
+    --chart-2: 174 62% 34%;
+    --chart-3: 256 52% 55%;
+    --chart-4: 32 90% 48%;
+    --chart-5: 350 60% 50%;
+    --grid: 35 14% 88%;
+  }
+  .dark {
+    --background: 220 24% 9%;
+    --foreground: 40 20% 92%;
+    --card: 220 22% 12%;
+    --card-foreground: 40 20% 92%;
+    --popover: 220 22% 13%;
+    --popover-foreground: 40 20% 92%;
+    --primary: 205 70% 68%;
+    --primary-foreground: 220 30% 10%;
+    --secondary: 220 18% 18%;
+    --secondary-foreground: 40 20% 92%;
+    --muted: 220 18% 16%;
+    --muted-foreground: 218 12% 66%;
+    --accent: 220 20% 20%;
+    --accent-foreground: 40 20% 92%;
+    --destructive: 0 65% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 16% 22%;
+    --input: 220 16% 28%;
+    --ring: 205 70% 60%;
+    --dp: 256 75% 74%;
+    --fl: 170 55% 55%;
+    --warn: 36 92% 60%;
+    --ok: 145 50% 55%;
+    --chart-1: 205 70% 64%;
+    --chart-2: 170 55% 52%;
+    --chart-3: 256 75% 74%;
+    --chart-4: 36 92% 60%;
+    --chart-5: 350 70% 66%;
+    --grid: 220 16% 22%;
+  }
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  .lab-grid-bg {
+    background-image: linear-gradient(hsl(var(--grid) / 0.5) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--grid) / 0.5) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  .formula {
+    @apply font-mono text-[0.92em] rounded-md bg-muted px-3 py-2 block overflow-x-auto whitespace-pre-wrap leading-relaxed;
+  }
+  .num {
+    @apply font-mono tabular-nums;
+  }
+  .prose-lab p {
+    @apply leading-relaxed text-[0.95rem];
+  }
+  .prose-lab p + p {
+    @apply mt-2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

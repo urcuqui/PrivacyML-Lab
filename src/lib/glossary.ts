@@ -1,0 +1,32 @@
+/** Glosario de términos técnicos (español, con el término inglés original). */
+export const GLOSSARY = {
+  epsilon: { term: 'Épsilon (ε) — privacy budget', def: 'Parámetro de pérdida de privacidad. Acota cuánto puede cambiar la probabilidad de cualquier resultado cuando se añade, elimina o reemplaza a una persona: un factor de como mucho e^ε. Menor ε ⇒ garantía más fuerte y, normalmente, más ruido.' },
+  delta: { term: 'Delta (δ)', def: 'En (ε, δ)-DP, probabilidad (pequeña) de que la cota e^ε no se cumpla. Debe ser mucho menor que 1/n. Los mecanismos gaussianos requieren δ > 0.' },
+  sensitivity: { term: 'Sensibilidad (Δf) — sensitivity', def: 'Máximo cambio posible del resultado exacto de una consulta entre dos conjuntos de datos vecinos. Para un conteo es 1. Determina, junto con ε, la cantidad de ruido necesaria.' },
+  neighbouring: { term: 'Conjuntos vecinos — neighbouring datasets', def: 'Dos conjuntos de datos que difieren en los datos de una sola unidad protegida (una persona o un cliente). Puede definirse como añadir/eliminar o como reemplazar.' },
+  laplace: { term: 'Mecanismo de Laplace', def: 'Añade ruido con distribución de Laplace de escala b = Δf/ε al resultado exacto. Garantiza ε-DP pura para consultas con sensibilidad L1 acotada.' },
+  gaussian: { term: 'Ruido gaussiano — Gaussian noise', def: 'Ruido normal N(0, σ²). Calibrado según la sensibilidad L2 ofrece (ε, δ)-DP. Es el ruido estándar en DP-SGD y DP-FedAvg.' },
+  clipping: { term: 'Recorte de gradientes — gradient clipping', def: 'Escala cada vector (gradiente o actualización) para que su norma L2 no supere C: v · min(1, C/‖v‖). Acota la influencia de cada unidad protegida, es decir, su sensibilidad.' },
+  noiseMultiplier: { term: 'Multiplicador de ruido (σ) — noise multiplier', def: 'Relación entre la desviación del ruido gaussiano y la norma de recorte: el ruido es N(0, (σ·C)²). Mayor σ ⇒ más privacidad y menos utilidad.' },
+  budget: { term: 'Presupuesto de privacidad — privacy budget', def: 'Cantidad total de pérdida de privacidad (ε) que se acepta gastar sobre un conjunto de datos. Cada publicación consume parte del presupuesto.' },
+  composition: { term: 'Composición — composition', def: 'Regla que acota la privacidad total cuando se combinan varios mecanismos. Composición secuencial básica: ejecutar mecanismos ε₁, …, ε_k sobre los mismos datos cuesta como mucho ε₁ + … + ε_k.' },
+  dpsgd: { term: 'DP-SGD', def: 'Descenso de gradiente estocástico diferencialmente privado: gradientes por ejemplo, recorte a norma C, suma, ruido gaussiano N(0, σ²C²) y actualización. La garantía final requiere un contador de privacidad.' },
+  accountant: { term: 'Contador de privacidad — privacy accountant', def: 'Procedimiento que calcula el ε (y δ) total de una secuencia de mecanismos, p. ej. mediante Rényi DP (RDP). Sin un contador válido no se debe declarar un ε.' },
+  rdp: { term: 'Rényi DP (RDP)', def: 'Variante de DP basada en la divergencia de Rényi de orden α. Facilita componer muchos mecanismos gaussianos; después se convierte a (ε, δ)-DP.' },
+  localEpochs: { term: 'Épocas locales — local epochs', def: 'Número de pasadas completas que cada cliente hace sobre sus datos locales en cada ronda federada. Más épocas ⇒ más cómputo local, posiblemente menos rondas, pero mayor deriva con datos heterogéneos.' },
+  round: { term: 'Ronda de comunicación — communication round', def: 'Ciclo completo: el servidor envía el modelo global, los clientes entrenan localmente, envían sus actualizaciones y el servidor agrega.' },
+  participation: { term: 'Participación de clientes — client participation', def: 'Fracción de clientes seleccionados en cada ronda. En sistemas reales no todos los dispositivos están disponibles a la vez.' },
+  fedavg: { term: 'FedAvg — Federated Averaging', def: 'Algoritmo federado clásico: el nuevo modelo global es la media de los modelos locales ponderada por el número de muestras de cada cliente: w = Σ (n_k/N) w_k.' },
+  secureAggregation: { term: 'Agregación segura — secure aggregation', def: 'Protocolo criptográfico que permite al servidor conocer solo la SUMA de las actualizaciones, no cada actualización individual. No protege lo que revela la suma ni el modelo final.' },
+  iid: { term: 'IID', def: 'Independientes e idénticamente distribuidos: todos los clientes tienen datos que siguen aproximadamente la misma distribución.' },
+  nonIid: { term: 'Non-IID', def: 'Los clientes tienen distribuciones distintas (desequilibrio de clases, desplazamiento de características, tamaños distintos). Es lo habitual en la práctica.' },
+  clientDrift: { term: 'Deriva de clientes — client drift', def: 'Con datos heterogéneos, cada cliente optimiza hacia su propio óptimo local; al entrenar muchas épocas locales los modelos se alejan entre sí y la media puede no apuntar al óptimo global.' },
+  privacyUnit: { term: 'Unidad de privacidad — privacy unit', def: 'Lo que la garantía protege: un registro (record-level DP) o todos los datos de un cliente (client-level DP). Cambia la definición de vecinos y, con ella, la sensibilidad.' },
+  seed: { term: 'Semilla aleatoria — random seed', def: 'Valor que inicializa el generador pseudoaleatorio para que los experimentos sean reproducibles. ¡No es aleatoriedad segura! Un despliegue real de DP necesita aleatoriedad criptográficamente segura y cambiar la semilla NO repone el presupuesto de privacidad.' },
+  learningRate: { term: 'Tasa de aprendizaje — learning rate', def: 'Tamaño del paso en cada actualización de los parámetros: θ ← θ − η·g.' },
+  batchSize: { term: 'Tamaño de lote — batch size', def: 'Número de ejemplos usados para calcular cada gradiente. En DP-SGD, el ruido se divide entre B, así que lotes mayores diluyen el ruido por ejemplo.' },
+  utility: { term: 'Utilidad — utility', def: 'Medida de lo útil que es el resultado publicado o el modelo: error de una estadística, precisión de un clasificador, etc.' },
+  logistic: { term: 'Regresión logística', def: 'Clasificador lineal: p(y=1|x) = σ(wᵀx + b). En el laboratorio tiene 2 características y un sesgo (3 parámetros).' },
+} as const;
+
+export type GlossaryKey = keyof typeof GLOSSARY;

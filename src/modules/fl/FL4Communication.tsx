@@ -247,7 +247,7 @@ export default function FL4Communication() {
               options={['loss', 'acc'] as const}
               format={(v) => (v === 'loss' ? 'Pérdida de test ≤' : 'Precisión de test ≥')}
               onChange={(v) => set('targetMetric', v)}
-              help="En este problema sintético la precisión se satura casi en la primera ronda; la pérdida muestra mejor la convergencia."
+              help="La precisión es una métrica discreta y ruidosa en conjuntos pequeños; la pérdida suele mostrar la convergencia de forma más estable."
             />
             {params.targetMetric === 'loss' ? (
               <ParamSlider label="Pérdida de test objetivo" ariaLabel="Pérdida de test objetivo" value={params.targetLoss} onChange={(v) => set('targetLoss', v)} min={0.1} max={0.7} step={0.01} help="Con Non-IID la pérdida alcanzable es mayor (prueba ≈ 0,46)." />

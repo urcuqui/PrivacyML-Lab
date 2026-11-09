@@ -4,6 +4,10 @@
 
 An interactive, fully client-side teaching lab for postgraduate students in Machine Learning, AI and Cybersecurity. Students change parameters, run real simulations in the browser, inspect intermediate computations and compare runs. The aim is to understand **what Differential Privacy (DP) and Federated Learning (FL) protect, what they do not protect, and the trade-offs involved**. The goal is not to make these techniques look impressive.
 
+![Demo of the Privacy-Preserving ML Lab: live Laplace sampler, step-by-step Laplace mechanism, centralised vs federated animation, FedAvg round inspector, combined A/B/C comparison and a knowledge-check question with feedback](docs/demo.gif)
+
+*Demo (recorded from the production build, all values computed live in the browser): overview with a live Laplace sampler → Laplace mechanism step by step and repeated releases → centralised vs federated workflow → FedAvg round inspector → Centralised vs FL vs FL+DP comparison (ε shown only when the accountant applies) → knowledge check with per-option feedback.*
+
 > **Resumen en español.** Laboratorio educativo interactivo (React + TypeScript) sobre Privacidad Diferencial y Aprendizaje Federado. Todo el contenido de la aplicación está en español. Se ejecuta íntegramente en el navegador, usa solo datos sintéticos, no necesita claves de API ni servidor, y funciona sin conexión una vez instaladas las dependencias. Cada experimento separa los cálculos reales, las garantías formales (bajo supuestos), las observaciones empíricas, los modelos simplificados y las ilustraciones conceptuales. Instalación: `npm install` y después `npm run dev`.
 
 ---
@@ -96,7 +100,7 @@ Every experiment uses the same layout: **Configuration** (left), **Interactive v
 | `/fl/1` | Centralised vs federated | Animated side-by-side flows of raw data vs model updates for three synthetic hospitals. |
 | `/fl/2` | A FedAvg round | Step-by-step FedAvg (init → selection → local training → transmission → weighted aggregation → evaluation). All parameters come from the live simulation. |
 | `/fl/3` | IID vs non-IID | Same FedAvg configuration under both data regimes, over repeated seeds: global accuracy, per-client accuracy, convergence and loss, with variability. |
-| `/fl/4` | Communication costs | Bytes per round and in total; a grid over local epochs × participation measuring rounds/bytes/gradient evaluations needed to reach a target accuracy; extrapolation to larger reference models. |
+| `/fl/4` | Communication costs | Bytes per round and in total; a grid over local epochs × participation measuring the rounds, bytes and gradient evaluations needed to reach a target test loss (default) or accuracy; extrapolation to larger reference models. |
 | `/fl/5` | Privacy limits of FL | Analytic gradient inversion for logistic regression (exact for one example, residual-weighted mean for a batch), optionally with noise. Includes a conceptual panel on secure aggregation, DP and TEEs/access control. |
 | `/combined` | FL with DP | Centralised vs FedAvg vs client-level DP-FedAvg under the same data, seed and test set; accuracy/loss, communication and compute overhead, update norms, clipping fraction; σ × C sweep (privacy–utility); conceptual secure-aggregation mode. |
 | `/quiz/{dp,fl,combined}` | Knowledge checks | 5 applied-reasoning questions per module, each option with its own explanation. Numeric questions are computed with the engine functions. |
@@ -153,6 +157,7 @@ With mini-batches or partial participation, a tight bound needs subsampling ampl
 
 **Synthetic federated data** (`src/lib/fl/data.ts`). Two 2-D Gaussian classes centred at ±(1, 1) with unit sd, labelled "Biomarcador A/B" and "riesgo alto/bajo".
 - IID: every client has p(y=1) = 0.5 and no shift.
+- Synthetic data (`generateBlobs`): two Gaussian classes in 2D sharing an **anisotropic, correlated covariance** (axis SDs 1.6·sd and 0.55·sd, rotated ≈26°) with class means `m ± (1, 1)` around a non-zero midpoint `m = (0.8, −0.6)`. The mean-difference direction is therefore *not* the Bayes-optimal boundary `Σ⁻¹(μ₁ − μ₀)` and the bias must be learned, so training needs several iterations to converge (Bayes-level accuracy ≈ 0.86). That makes the effects of noise, heterogeneity and communication visible.
 - Non-IID: label skew `p_k = 0.5 + 0.45·imbalance·t_k` with `t_k ∈ [−1, 1]`; covariate shift of magnitude `featureShift` in a client-specific direction; optional geometric size skew.
 - The fixed global test set is a balanced mixture of all clients' distributions.
 

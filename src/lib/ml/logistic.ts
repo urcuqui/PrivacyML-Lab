@@ -98,21 +98,43 @@ export function sgdTrain(start: Vec, data: readonly Sample[], epochs: number, lr
 export interface BlobOptions {
   /** Probabilidad de y = 1. */
   pPositive?: number;
-  /** Centro de la clase 1 (la clase 0 se sitúa en −centro). */
+  /** Semidiferencia de medias: μ₁ = m + centro, μ₀ = m − centro. */
   center?: [number, number];
+  /** Escala global de la dispersión. */
   sd?: number;
   /** Desplazamiento de características aplicado a ambas clases (covariate shift). */
   shift?: [number, number];
 }
 
-/** Dos nubes gaussianas en 2D (sintéticas). */
+/**
+ * Geometría del problema sintético. Las clases comparten una covarianza ANISÓTROPA y
+ * correlacionada (desviaciones 1,6·sd y 0,55·sd en ejes rotados) y su punto medio m no está en
+ * el origen. Así la dirección de la diferencia de medias NO es la frontera óptima de Bayes
+ * (que es Σ⁻¹(μ₁ − μ₀)) y el sesgo debe aprenderse: el modelo necesita varias iteraciones para
+ * converger, lo que hace visibles los efectos del ruido, la heterogeneidad y la comunicación.
+ */
+export const BLOB_GEOMETRY = {
+  midpoint: [0.8, -0.6] as [number, number],
+  axisSd: [1.6, 0.55] as [number, number],
+  rotation: 0.45, // radianes (~26°); la diferencia de medias está a 45°
+};
+
+/** Dos nubes gaussianas en 2D (sintéticas) con covarianza común anisótropa. */
 export function generateBlobs(n: number, rng: RNG, opts: BlobOptions = {}): Sample[] {
   const { pPositive = 0.5, center = [1, 1], sd = 1, shift = [0, 0] } = opts;
+  const { midpoint, axisSd, rotation } = BLOB_GEOMETRY;
+  const c = Math.cos(rotation);
+  const s = Math.sin(rotation);
   const out: Sample[] = [];
   for (let i = 0; i < n; i++) {
     const y: 0 | 1 = rng.next() < pPositive ? 1 : 0;
     const sign = y === 1 ? 1 : -1;
-    out.push({ x: [rng.normal(sign * center[0] + shift[0], sd), rng.normal(sign * center[1] + shift[1], sd)], y });
+    const z1 = rng.normal(0, axisSd[0] * sd);
+    const z2 = rng.normal(0, axisSd[1] * sd);
+    out.push({
+      x: [midpoint[0] + shift[0] + sign * center[0] + c * z1 - s * z2, midpoint[1] + shift[1] + sign * center[1] + s * z1 + c * z2],
+      y,
+    });
   }
   return out;
 }

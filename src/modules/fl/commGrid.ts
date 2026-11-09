@@ -4,7 +4,7 @@ import { runFedAvg, type FedAvgConfig } from '@/lib/fl/fedavg';
 /**
  * Malla de simulaciones FedAvg (épocas locales × participación) que mide cuánta comunicación
  * y cuánto cómputo hacen falta para alcanzar un objetivo. Admite objetivo por pérdida de test
- * (más informativo en este problema sintético, donde la precisión se satura muy pronto) o por precisión.
+ * (más estable que la precisión en conjuntos pequeños) o por precisión.
  */
 export type TargetMetric = 'loss' | 'acc';
 

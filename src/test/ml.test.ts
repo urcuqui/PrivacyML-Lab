@@ -41,7 +41,7 @@ describe('DP-SGD', () => {
   const cfg = { learningRate: 0.5, batchSize: 32, steps: 150, clipNorm: 1, noiseMultiplier: 1, seed: 7 };
   it('SGD aprende el problema sintético', () => {
     const r = trainLogistic('sgd', train, test, cfg);
-    expect(r.history[r.history.length - 1].testAcc).toBeGreaterThan(0.85);
+    expect(r.history[r.history.length - 1].testAcc).toBeGreaterThan(0.8);
     expect(accuracy(initParams(2), test)).toBeLessThan(0.7);
   });
   it('todos los gradientes recortados tienen norma ≤ C', () => {

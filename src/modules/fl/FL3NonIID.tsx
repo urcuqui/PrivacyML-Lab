@@ -467,7 +467,7 @@ export default function FL3NonIID() {
             equations={[
               'Non-IID: p_k(y=1) = 0,5 + 0,45 · desequilibrio · t_k,   t_k ∈ [−1, 1] repartido entre clientes',
               'Desplazamiento: x | y ~ N(±(1, 1) + s·(cos φ_k, sin φ_k), I),   φ_k = 2πk/K + 0,3',
-              'Rondas hasta 95 % (precisión) = primera ronda con precisión ≥ 0,95 × precisión final (por repetición); en este problema suele saturarse en 1–2 rondas',
+              'Rondas hasta 95 % (precisión) = primera ronda con precisión ≥ 0,95 × precisión final (por repetición)',
               'Convergencia de la pérdida = primera ronda con L̄_t ≤ L̄_final + 0,05·(L̄_0 − L̄_final), sobre la curva media',
               'Media ± desviación estándar muestral sobre las repeticiones',
             ]}

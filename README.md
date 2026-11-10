@@ -96,16 +96,17 @@ Every experiment uses the same layout: **Configuration** (left), **Interactive v
 | `/dp/2` | Laplace mechanism | True count, noisy release `count + Lap(1/ε)`, noise, absolute error, and the distribution over N seeded repetitions against the theoretical density. |
 | `/dp/3` | Privacy vs utility | Empirical mean absolute error vs ε (with variability), release distributions for neighbouring datasets, privacy-loss ratio ≤ e^ε, bounded-mean sensitivity `(U−L)/n` and clamping bias. |
 | `/dp/4` | Budget composition | Sequential-composition ledger with limit and over-budget warnings; one release vs the average of k releases (total cost k·ε). |
-| `/dp/5` | DP-SGD | Logistic regression with SGD vs DP-SGD: per-example gradients, clipping, Gaussian noise, updates, loss/accuracy curves. ε is shown only when the implemented accountant applies (full batch); otherwise **"No calculado"**. |
+| `/dp/5` | DP-SGD | Logistic regression with SGD vs DP-SGD: per-example gradients, clipping, Gaussian noise, updates, loss/accuracy curves, contextual check on too-small clipping norms (with an on-demand C/10 run). Selectable adjacency; ε shown only when the accountant applies (add/remove: full batch; replacement: full or mini-batch), otherwise **"No calculado"** with the reason. |
 | `/fl/1` | Centralised vs federated | Animated side-by-side flows of raw data vs model updates for three synthetic hospitals. |
 | `/fl/2` | A FedAvg round | Step-by-step FedAvg (init → selection → local training → transmission → weighted aggregation → evaluation). All parameters come from the live simulation. |
-| `/fl/3` | IID vs non-IID | Same FedAvg configuration under both data regimes, over repeated seeds: global accuracy, per-client accuracy, convergence and loss, with variability. |
+| `/fl/3` | IID vs non-IID | Same FedAvg configuration under both regimes over repeated seeds, evaluated on **each scenario's own distribution and on a common, fixed reference population**; global/per-client accuracy, convergence, loss and variability, with computed verdicts for both evaluations. |
 | `/fl/4` | Communication costs | Bytes per round and in total; a grid over local epochs × participation measuring the rounds, bytes and gradient evaluations needed to reach a target test loss (default) or accuracy; extrapolation to larger reference models. |
 | `/fl/5` | Privacy limits of FL | Analytic gradient inversion for logistic regression (exact for one example, residual-weighted mean for a batch), optionally with noise. Includes a conceptual panel on secure aggregation, DP and TEEs/access control. |
-| `/combined` | FL with DP | Centralised vs FedAvg vs client-level DP-FedAvg under the same data, seed and test set; accuracy/loss, communication and compute overhead, update norms, clipping fraction; σ × C sweep (privacy–utility); conceptual secure-aggregation mode. |
+| `/combined` | FL with DP | Controlled comparison: A centralised, B1 weighted FedAvg, B2 uniform FedAvg, C uniform + clipping (not DP), D client-level DP-FedAvg repeated over noise seeds — same data, selection and local training. Waterfall decomposition of the accuracy gap into weighting, clipping and noise; privacy model card (adjacency, trust model: external observers vs server); σ × C sweep with both baselines; conceptual secure-aggregation mode. |
 | `/quiz/{dp,fl,combined}` | Knowledge checks | 5 applied-reasoning questions per module, each option with its own explanation. Numeric questions are computed with the engine functions. |
 | `/quiz` | Final challenge | Three fictional organisations (hospital network, mobile keyboard, statistics agency) with explicit accuracy, privacy and communication requirements; rule-based feedback per requirement (meets / partially / fails) plus a reasoned discussion. |
-| `/journey` | Guided journey | Seven stages from "the privacy problem" to "final decision". Experiment state persists as you move between stages. |
+| `/journey` | Guided journey | Seven stages from "the privacy problem" to "final decision", plus an optional eighth stage on agentic AI. Experiment state persists as you move between stages. |
+| `/agentic` | Beyond the model: privacy in agentic AI | Conceptual, deterministic, rule-based simulation (no LLM) with synthetic patients: (1) what FL + DP protect, (2) agent memory policies and cross-user leakage, (3) a prompt-injection-driven tool exfiltration attempt with toggleable controls; the DP toggle provably never changes the outcome. Takeaway: model-level privacy does not imply system-level privacy. |
 
 ## Methodology and scientific integrity
 
@@ -128,42 +129,88 @@ The lab never invents metrics or ε values. Seeded randomness is labelled as a r
 
 ## Mathematical assumptions
 
-**Laplace mechanism.** `M(D) = f(D) + Lap(b)` with `b = Δf / ε` gives pure ε-DP when Δf is the true global L1 sensitivity: `P[M(D) ∈ S] ≤ e^ε · P[M(D′) ∈ S]` for all neighbouring D, D′ and all sets S. E|noise| = b and sd = √2·b. The guarantee is distributional. It does not promise that each individual release looks similar.
+All privacy assumptions are centralised in [`src/lib/privacy/model.ts`](src/lib/privacy/model.ts): the **privacy unit** (record or client), the **adjacency** (add/remove or replacement), the sensitivity under that adjacency, the noise, the **trust model**, the outputs covered by the guarantee and the outputs the lab shows that are **outside** it. Every experiment with a DP mechanism renders this in a "Modelo de privacidad" card and exports it in reports.
 
-**Neighbouring datasets and sensitivity** (`src/lib/dp/sensitivity.ts`):
-- Count, add/remove one person: Δ = 1 (each person appears at most once).
-- Bounded sum on `[L, U]`, add/remove: Δ = max(|L|, |U|). With replacement: Δ = U − L.
-- Bounded mean, replacement neighbours, public n: **Δ = (U − L) / n**. Values are clamped to public bounds chosen independently of the data. Clamping can introduce bias.
+### Adjacency and sensitivity
 
-**Sequential composition.** Running ε₁,…,ε_k-DP mechanisms on the same data costs at most Σεᵢ. The budget ledger refuses queries that would exceed the limit. Changing the seed never refunds budget.
+| Quantity | Add/remove (unbounded) | Replacement (bounded, n or K public) |
+|---|---|---|
+| Count | Δ₁ = 1 | Δ₁ = 1 |
+| Bounded sum on `[L, U]` | Δ₁ = max(\|L\|, \|U\|) | Δ₁ = U − L |
+| Bounded mean on `[L, U]` | not useful with unknown n: release noisy sum and noisy count separately | Δ₁ = (U − L)/n |
+| Proportion count/n | not valid (n not public) | Δ₁ = 1/n |
+| Sum of vectors clipped to ‖·‖₂ ≤ C | **Δ₂ = C** | **Δ₂ = 2C** (v → v′ with ‖v‖, ‖v′‖ ≤ C) |
 
-**DP-SGD** (`src/lib/dp/dpsgd.ts`), per step: (1) per-example gradients `(σ(θᵀx̃) − y)·x̃`; (2) clip each to L2 norm C: `g·min(1, C/‖g‖)`; (3) sum; (4) add `N(0, σ²C²·I)`; (5) divide by the public batch size B and update. Batches come from per-epoch shuffling, which is not Poisson sampling.
+The clipped-sum sensitivities hold only when every protected unit contributes one vector to the sum and the sum is divided by a **public constant** (never by a data-dependent count). Values are clamped to public bounds chosen independently of the data.
 
-**Privacy accountant** (`src/lib/dp/accountant.ts`). Each step is a Gaussian mechanism with L2 sensitivity C and noise multiplier σ, so its RDP is `α/(2σ²)`. T adaptive steps compose to `Tα/(2σ²)`. Conversion to (ε, δ)-DP (Mironov 2017):
+**Laplace mechanism.** `M(D) = f(D) + Lap(Δ₁/ε)` is pure ε-DP: `P[M(D) ∈ S] ≤ e^ε · P[M(D′) ∈ S]`. E|noise| = b and sd = √2·b. The guarantee is distributional, not a promise about each draw.
+
+**Sequential composition.** ε₁,…,ε_k-DP mechanisms on the same data cost at most Σεᵢ. The DP4 ledger uses replacement adjacency with a public N (counts Δ₁ = 1, mean Δ₁ = (U − L)/N). Changing the seed never refunds budget.
+
+### Gaussian / RDP accountant ([`src/lib/dp/accountant.ts`](src/lib/dp/accountant.ts))
+
+Noise is `N(0, σ²C²·I)` and the sensitivity of each composition is `k·C` (k = 1 add/remove, k = 2 replacement), so the effective noise multiplier is **z = σ/k**. Per composition `ε_RDP(α) = α/(2z²)`; T adaptive compositions give `Tα/(2z²)`; conversion (Mironov 2017):
 
 ```
-ε(δ) = min_{α>1}  T·α / (2σ²)  +  ln(1/δ) / (α − 1)
+ε(δ) = min_{α>1}  T·α / (2z²)  +  ln(1/δ) / (α − 1)
 ```
 
-This bound is valid but conservative. It is computed **only** when every protected unit is in every step:
-- DP-SGD with full batch (B = n).
-- DP-FedAvg with 100 % client participation.
+This is a **valid but conservative** bound: no subsampling amplification. The test suite checks soundness against the exact privacy curve of the Gaussian composition (μ-GDP with μ = √T/z, Dong–Roth–Su 2019): `δ_exact(ε_RDP) ≤ δ` for σ ∈ {0.7, 1, 2, 4}, T ∈ {1, 10, 100}, k ∈ {1, 2}, δ ∈ {10⁻³, 10⁻⁵}, and that RDP is within 2.5× of the exact ε.
 
-With mini-batches or partial participation, a tight bound needs subsampling amplification (e.g. a Poisson-subsampled Gaussian accountant), which is not implemented. The UI shows **"No calculado"** and gives the reason. σ = 0 also shows "No calculado". The bound further assumes ideal Gaussian sampling with secure randomness, which the lab's seeded PRNG is not.
+### DP-SGD — record-level ([`src/lib/dp/dpsgd.ts`](src/lib/dp/dpsgd.ts))
 
-**FedAvg** (`src/lib/fl/fedavg.ts`). `m = max(1, round(p·K))` clients are sampled per round with a seeded RNG. Each runs E local epochs of mini-batch SGD from the global model. Aggregation: `w_global = Σ_k (n_k / N)·w_k`, where N is the total number of samples among **participating** clients.
+Per step: (1) per-example gradients `(σ(θᵀx̃) − y)·x̃`; (2) clip to L2 norm C; (3) sum; (4) add `N(0, σ²C²·I)`; (5) divide by the public constant B and update. Batches come from a data-independent per-epoch shuffle (`createBatchScheduler`): ⌊n/B⌋ batches per epoch, so each record appears **at most once per epoch**.
 
-**DP-FedAvg (client-level DP, central model).** The privacy unit is the **whole client**. Each client delta `Δ_k = w_k − w_global` is clipped to norm C. The server, which must be trusted to add the noise, computes `w_global + (Σ clip(Δ_k) + N(0, σ²C²·I)) / m`, an *unweighted* mean so that sensitivity stays C. Record-level DP and distributed noise under secure aggregation are discussed but not implemented.
+| Adjacency | Batching | Accounting |
+|---|---|---|
+| any | σ = 0 | **No calculado** (clipping alone is not DP) |
+| add/remove | full batch (B = n) | T compositions, Δ₂ = C |
+| add/remove | mini-batches | **No calculado**: the schedule depends on n, which differs between neighbours; a tight bound needs Poisson subsampling + amplification (not implemented) |
+| replacement | full batch | T compositions, Δ₂ = 2C |
+| replacement | mini-batches | ⌈T/⌊n/B⌋⌉ compositions, Δ₂ = 2C |
 
-**Synthetic federated data** (`src/lib/fl/data.ts`). Two 2-D Gaussian classes centred at ±(1, 1) with unit sd, labelled "Biomarcador A/B" and "riesgo alto/bajo".
-- IID: every client has p(y=1) = 0.5 and no shift.
-- Synthetic data (`generateBlobs`): two Gaussian classes in 2D sharing an **anisotropic, correlated covariance** (axis SDs 1.6·sd and 0.55·sd, rotated ≈26°) with class means `m ± (1, 1)` around a non-zero midpoint `m = (0.8, −0.6)`. The mean-difference direction is therefore *not* the Bayes-optimal boundary `Σ⁻¹(μ₁ − μ₀)` and the bias must be learned, so training needs several iterations to converge (Bayes-level accuracy ≈ 0.86). That makes the effects of noise, heterogeneity and communication visible.
-- Non-IID: label skew `p_k = 0.5 + 0.45·imbalance·t_k` with `t_k ∈ [−1, 1]`; covariate shift of magnitude `featureShift` in a client-specific direction; optional geometric size skew.
-- The fixed global test set is a balanced mixture of all clients' distributions.
+The last row holds because, with n public, the schedule does not depend on the data. In a step without the replaced record the two output distributions coincide (zero divergence). Rényi divergence is jointly quasi-convex (van Erven & Harremoës 2014), so the worst schedule bounds the mixture over shuffles. Training loss and accuracy curves are computed **without noise on private data** and are outside the guarantee (instrumentation). The test set is treated as non-protected.
 
-**Communication model** (`src/lib/fl/communication.ts`). Per round: `m × P × 4 bytes` down plus the same up (float32 parameters only). Headers, encryption, compression, retries, latency and bandwidth asymmetry are excluded. The lab model has P = 3.
+### FedAvg variants ([`src/lib/fl/fedavg.ts`](src/lib/fl/fedavg.ts))
 
-**Centralised baseline.** Pooled SGD for `rounds × local epochs` epochs with the same learning rate, batch size, data and test set.
+`m̄ = max(1, round(p·K))` clients are selected per round by a seeded, data-independent rule; each runs E local epochs of SGD from the global model.
+
+| Variant | Update rule | DP? |
+|---|---|---|
+| Weighted FedAvg (default) | `w ← Σ (n_k/N)·w_k`, N = samples of participants | no |
+| Uniform FedAvg | `w ← w + (1/m̄)·Σ Δ_k` | no |
+| Clipped FedAvg | `w ← w + (1/m̄)·Σ clip(Δ_k, C)` | **no** — clipping without noise is not DP |
+| DP-FedAvg (client-level, central DP) | `w ← w + (Σ clip(Δ_k, C) + N(0, σ²C²·I)) / m̄` | yes, under the assumptions below |
+
+DP-FedAvg uses uniform weights because n_k-weights would change the sensitivity and n_k is itself private. The denominator m̄ is a public constant. The noise has its own seed (`noiseSeed`), so noise repetitions keep data, client selection and local training identical.
+
+| Client-level adjacency | Participation | Accounting |
+|---|---|---|
+| add/remove | 100 % | T = rounds, Δ₂ = C |
+| add/remove | partial | **No calculado** (fixed-size selection depends on K; amplification not implemented) |
+| replacement (K public) | any | T = rounds (worst case: selected every round), Δ₂ = 2C |
+
+**Trust model.** The aggregation server is trusted: it receives every Δ_k in the clear, clips and adds noise. Server-side DP protects the **published global models** against external observers (other clients, analysts, model users). It does **not** protect against the server. Reducing that trust requires secure aggregation and/or distributed or local noise (only discussed conceptually).
+
+### Controlled combined experiment ([`src/lib/tasks.ts`](src/lib/tasks.ts) `combinedCompare`)
+
+A (centralised reference), B1 weighted FedAvg, B2 uniform FedAvg, C uniform + clipping, D DP-FedAvg with R noise seeds. Same data, test set, client selection and local training. The **sequential decomposition** `weighting = B2 − B1`, `clipping = C − B2`, `noise = mean(D) − C` (± sd over R) is an empirical observation under this setup. With interacting effects, another order could split the difference differently.
+
+### Synthetic data ([`src/lib/fl/data.ts`](src/lib/fl/data.ts), [`src/lib/ml/logistic.ts`](src/lib/ml/logistic.ts))
+
+- `generateBlobs`: two Gaussian classes in 2-D sharing an **anisotropic, correlated covariance** (axis SDs 1.6·sd and 0.55·sd, rotated ≈26°), class means `m ± (1, 1)` around `m = (0.8, −0.6)`. The mean-difference direction is not the Bayes boundary `Σ⁻¹(μ₁ − μ₀)` and the bias must be learned, so training needs several iterations (Bayes-level accuracy ≈ 0.86).
+- IID: every client has p(y=1) = 0.5 and no shift. Non-IID: label skew `p_k = 0.5 + 0.45·imbalance·t_k`, `t_k ∈ [−1, 1]`; covariate shift of magnitude `featureShift` in a client-specific direction; optional geometric size skew.
+- **Scenario evaluation set** (`globalTest`): a balanced mixture of that scenario's client distributions, so it differs between IID and Non-IID.
+- **Common reference evaluation set** (`referenceTest`): target population "general regional population" with P(y=1) = 0.5 and no shift, generated with its own seed `REFERENCE_SEED`. It is identical across modes, data seeds, repetitions and client counts, and disjoint from training data. It coincides with the IID training distribution, a deliberate choice that may favour IID.
+
+**Communication model** ([`src/lib/fl/communication.ts`](src/lib/fl/communication.ts)). Per round: `m × P × 4 bytes` down plus the same up (float32 parameters only), with P = 3. It excludes headers, encryption, compression, retries, latency and bandwidth asymmetry.
+
+**Centralised baseline.** Pooled SGD for `rounds × local epochs` epochs with the same learning rate, batch size, data and test sets.
+
+### Educational reproducibility vs production privacy ([`src/lib/rng/rng.ts`](src/lib/rng/rng.ts))
+
+- **Educational reproducibility:** `createSeededRng` (Mulberry32) is deterministic and predictable from the displayed seed. It exists only to repeat classroom experiments and is **never** suitable for production DP.
+- **Production privacy:** this needs secure randomness, validated samplers resistant to floating-point attacks (snapping, or discrete Laplace/Gaussian), formally justified assumptions and an audited library (OpenDP, Google DP, Opacus/TF Privacy accountants). `createCryptoRng` only swaps the bit source for `crypto.getRandomValues`. The Laplace and Box–Muller samplers stay floating-point and vulnerable (Mironov 2012), so it is **not** production-ready, and swapping the RNG alone does not make the mechanisms safe.
 
 ---
 
@@ -171,33 +218,38 @@ With mini-batches or partial participation, a tight bound needs subsampling ampl
 
 The in-app page `/limits` has the full list. In summary:
 
-- **Seeded PRNG is not secure.** Mulberry32 is for reproducibility only. Real DP deployments need cryptographically secure randomness.
-- **Floating-point issues.** Naive floating-point Laplace/Gaussian sampling can leak through low-order bits (Mironov 2012). Production libraries use snapping or discrete sampling; this lab does not.
-- **Conservative ε, no subsampling amplification.** Formal ε is shown only in full-batch / full-participation modes.
-- **Unaccounted tuning.** Hyper-parameter tuning on private data also leaks information and is not accounted for here.
-- **Simulated FL.** Clients are simulated in-browser: no network, dropouts, stragglers, malicious or Byzantine clients.
-- **Toy model.** The model is a 3-parameter logistic regression. Deep, non-convex models behave differently.
-- **Leakage illustration is not an attack.** Gradient inversion here is an analytic illustration on a linear model, not a full reconstruction attack such as DLG.
+- **Seeded PRNG and floating-point samplers** are for reproducibility only; see above.
+- **Conservative ε, no subsampling amplification.** Formal ε appears only in the configurations listed in the accounting tables; everything else shows "No calculado" with the reason.
+- **Instrumentation outside the guarantee.** Training metrics, per-client accuracy, individual updates and clipped fractions are shown for teaching and are not covered by any ε.
+- **Trusted server.** Central DP-FedAvg does not protect against the aggregation server.
+- **Unaccounted tuning.** Choosing hyper-parameters or clamping bounds by looking at private results consumes privacy that is not accounted for.
+- **Simulated FL.** In-browser clients: no network, dropouts, stragglers, malicious or Byzantine clients.
+- **Toy model.** 3-parameter logistic regression; deep, non-convex models behave differently.
+- **Leakage illustration is not an attack.** Analytic gradient inversion on a linear model, not DLG-style reconstruction.
 - **Secure aggregation is conceptual.** No cryptographic protocol is implemented.
-- **Non-IID is not always worse.** IID vs non-IID outcomes depend on the synthetic generator.
-- **Out of scope.** Membership inference on the final model, poisoning, and regulatory compliance (GDPR, HIPAA) are not evaluated.
-- **Data.** All data is fictional and synthetic.
+- **Empirical comparisons.** IID vs Non-IID results and the weighting/clipping/noise decomposition depend on the synthetic generator, seed and evaluation distribution. Non-IID is not always worse.
+- **Agentic AI section is conceptual.** A deterministic, rule-based simulation; no LLM, no real agent framework.
+- **Out of scope.** Membership inference on the final model, poisoning, regulatory compliance (GDPR, HIPAA).
 
 ---
 
 ## Testing
 
 ```bash
-npm test
+npm run typecheck && npm test && npm run build
 ```
 
 Vitest suites in `src/test/` and `src/modules/quiz/` cover:
 - **RNG:** reproducibility, uniform/normal moments, Laplace mean/variance/E|X|/quantiles, invalid scales.
-- **DP:** `b = Δ/ε` and its monotonicity in ε, input validation, empirical MAE → b, the privacy-loss bound ≤ ε, sensitivities (including a randomized check that the bounded mean changes by at most Δ), sequential composition and over-budget refusal, repeated-release averaging, RDP accountant vs closed form, and its monotonicity in σ and T.
-- **ML / DP-SGD:** analytic vs finite-difference gradients, L2 clipping, learning on synthetic data, clipped norms ≤ C, empirical noise sd ≈ σC, reproducibility, and ε computed only when valid.
-- **FL:** exact weighted FedAvg aggregation (also inside a full round), client selection, reproducible data, non-IID label skew, size skew, convergence, invalid configs, DP-FedAvg clipping and update rule, accounting applicability, communication totals matching the simulation.
-- **Tasks:** utility sweep monotonicity and reproducible comparisons.
-- **Quiz:** exactly one correct option per question, explanations for every option, scoring, and reference answers passing the final challenge.
+- **DP:** `b = Δ/ε`, input validation, empirical MAE → b, privacy-loss bound ≤ ε, sensitivities (randomised bounded-mean check), sequential composition and over-budget refusal, repeated-release averaging.
+- **Adjacency and sensitivity** (`privacy.test.ts`): C vs 2C for clipped sums, including attainability of 2C; counts, proportions, and the add/remove mean error.
+- **RDP accounting:** closed-form reference values, k = 2 ≡ σ/2, monotonicity in k, T and σ, and **soundness against the exact μ-GDP curve** over a grid of σ, T, k and δ.
+- **DP-SGD:** the five-case accounting table, the real batch schedule respecting ⌈T/⌊n/B⌋⌉, training using exactly that schedule, and noise sd = σC under both adjacencies.
+- **DP-FedAvg:** the exact update rule with public denominator m̄, noise sd = σC, m̄ under partial participation, the client-level accounting table, the server-trust assumption, and rejection of weighted DP aggregation.
+- **Aggregation:** weighted vs uniform rules, clipping-only (no noise, no ε), DP with σ = 0 equal to clipping-only, noise seed isolating noise from selection and training, reproducible combined comparison, and a decomposition that sums to the total.
+- **Reference evaluation:** identical across modes, seeds and client counts; disjoint from training; independent seed and size.
+- **Exports:** reports include unit, adjacency, sensitivity, C, σ, (ε, δ) and accountant assumptions; the reason when ε is not computed; a "no guarantee" statement otherwise; general limitations always present; δ never rounded to 0.
+- **FL, tasks, quiz:** FedAvg aggregation, selection, non-IID generation, communication totals, sweeps, quiz integrity and challenge reference answers.
 
 ## Data storage and export
 

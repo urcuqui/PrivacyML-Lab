@@ -7,15 +7,17 @@ import { ConfigSection, ParamSlider, SeedControl } from '@/components/lab/ParamC
 import { Callout, ErrorList, ShowCalculations, StatTile } from '@/components/lab/Blocks';
 import { RunTimeline } from '@/components/lab/RunTimeline';
 import { IntegrityBadge } from '@/components/lab/IntegrityBadge';
+import { AdjacencyChoice, ContextualCheck, PrivacyModelCard } from '@/components/lab/PrivacyModel';
+import { dpsgdSpec, type Adjacency } from '@/lib/privacy/model';
 import { Term } from '@/components/lab/Term';
 import { Button } from '@/components/ui/button';
 import { ChartFrame } from '@/components/charts/ChartFrame';
 import { C, axisProps, gridProps, legendProps, tooltipProps, fmtNum } from '@/components/charts/chartTheme';
 import { usePersistentState } from '@/lib/store';
-import { useRuns } from '@/lib/runs';
+import { privacyRecord, useRuns } from '@/lib/runs';
 import { createSeededRng, deriveSeed } from '@/lib/rng/rng';
 import { generateBlobs, splitTrainTest, type Sample } from '@/lib/ml/logistic';
-import { trainLogistic, validateDpsgdConfig, type StepTrace, type TrainResult } from '@/lib/dp/dpsgd';
+import { maxParticipationsPerRecord, trainLogistic, validateDpsgdConfig, type StepTrace, type TrainResult } from '@/lib/dp/dpsgd';
 import { norm2, type Vec } from '@/lib/vec';
 import { f, fromLabeled, toLabeled } from './common';
 
@@ -23,8 +25,8 @@ const ID = 'dp5';
 const TITLE = '¿Puede la DP proteger el entrenamiento de modelos?';
 const DELTA = 1e-5;
 
-type Params = { n: number; learningRate: number; batchSize: number; steps: number; clipNorm: number; noiseMultiplier: number; seed: number };
-const DEFAULTS: Params = { n: 400, learningRate: 0.5, batchSize: 32, steps: 200, clipNorm: 1, noiseMultiplier: 1, seed: 7 };
+type Params = { n: number; learningRate: number; batchSize: number; steps: number; clipNorm: number; noiseMultiplier: number; seed: number; adjacency: Adjacency };
+const DEFAULTS: Params = { n: 400, learningRate: 0.5, batchSize: 32, steps: 200, clipNorm: 1, noiseMultiplier: 1, seed: 7, adjacency: 'add-remove' };
 const LABELS: Record<keyof Params, string> = {
   n: 'Tamaño del conjunto (n)',
   learningRate: 'Tasa de aprendizaje η',
@@ -33,7 +35,10 @@ const LABELS: Record<keyof Params, string> = {
   clipNorm: 'Norma de recorte C',
   noiseMultiplier: 'Multiplicador de ruido σ',
   seed: 'Semilla',
+  adjacency: 'Vecindad (adjacency)',
 };
+
+const adjOf = (p: Params): Adjacency => (p.adjacency === 'replace' ? 'replace' : 'add-remove');
 
 interface Result {
   params: Params;
@@ -161,6 +166,70 @@ function GradientViz({ trace, C: clip, B, lr }: { trace: StepTrace; C: number; B
   );
 }
 
+/** Pregunta contextual: ¿qué pasa si C es demasiado pequeño? (explicación basada en los resultados reales). */
+function ClipCheck({ res }: { res: Result }) {
+  const [alt, setAlt] = useState<{ C: number; acc: number; loss: number; clipped: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const last = (r: TrainResult) => r.history[r.history.length - 1];
+  const P = res.params;
+  const accSgd = last(res.sgd).testAcc;
+  const accDp = last(res.dp).testAcc;
+  const gap = accSgd - accDp;
+  const trace = res.dp.traces[0];
+  const meanClipped = trace ? trace.perExample.reduce((s, q) => s + q.clippedNorm, 0) / trace.perExample.length : NaN;
+  const meanRaw = trace ? trace.perExample.reduce((s, q) => s + q.norm, 0) / trace.perExample.length : NaN;
+  const noisePerCoord = (P.noiseMultiplier * P.clipNorm) / P.batchSize;
+  const signal = trace ? Math.hypot(...trace.gradSum) / P.batchSize : NaN;
+  const runAlt = () => {
+    setBusy(true);
+    setTimeout(() => {
+      const C2 = P.clipNorm / 10;
+      const r = trainLogistic('dpsgd', res.train, res.test, { ...P, clipNorm: C2, adjacency: adjOf(P), delta: DELTA });
+      setAlt({ C: C2, acc: last(r).testAcc, loss: last(r).testLoss, clipped: r.clippedFraction });
+      setBusy(false);
+    }, 10);
+  };
+  return (
+    <ContextualCheck
+      question="¿Qué sucede cuando disminuimos demasiado el clipping norm?"
+      explanation={
+        <>
+          <p>
+            En tu ejecución (C = {f(P.clipNorm)}, σ = {f(P.noiseMultiplier)}, B = {P.batchSize}) se recortó el <strong>{f(res.dp.clippedFraction * 100, 1)} %</strong> de los gradientes por ejemplo. En el primer paso,
+            la norma media era {f(meanRaw, 3)} antes del recorte y {f(meanClipped, 3)} después. La precisión de prueba fue {f(accSgd * 100, 1)} % con SGD y {f(accDp * 100, 1)} % con DP-SGD (diferencia{' '}
+            {f(gap * 100, 1)} puntos).
+          </p>
+          <p>
+            Ruido por coordenada en el gradiente medio: σC/B = {f(noisePerCoord, 4)}, frente a una señal ‖Σḡ‖/B = {f(signal, 4)} en el primer paso.{' '}
+            {res.dp.clippedFraction > 0.8
+              ? 'Casi todos los gradientes se recortan: el gradiente medio pierde magnitud (como si la tasa de aprendizaje efectiva bajara) y los ejemplos dejan de pesar según su error, lo que introduce sesgo.'
+              : res.dp.clippedFraction < 0.1
+                ? 'Muy pocos gradientes se recortan: C apenas limita la influencia individual, pero el ruido σC es grande en relación con gradientes que son menores que C.'
+                : 'Una parte de los gradientes se recorta: C equilibra el sesgo (recortar) y el ruido (proporcional a C).'}
+          </p>
+          <p>
+            Al reducir C, el ruido σC también se reduce en la misma proporción; por eso, una vez que casi todo se recorta, la relación señal/ruido por paso deja de mejorar, mientras que el sesgo (pérdida de magnitud y de la
+            ponderación por error) aumenta. El ε no cambia con C: depende de σ, de los pasos y de la vecindad.
+          </p>
+          <Button size="sm" variant="outline" disabled={busy} onClick={runAlt}>
+            {busy ? <Loader2 className="animate-spin" /> : <Play />} Calcular con C/10 (mismo σ, misma semilla)
+          </Button>
+          {alt && (
+            <p className="rounded-md bg-muted p-2 text-xs" aria-live="polite">
+              Con C = {f(alt.C, 4)}: recortados {f(alt.clipped * 100, 1)} %, precisión de prueba {f(alt.acc * 100, 1)} % (pérdida {f(alt.loss, 3)}), frente a {f(accDp * 100, 1)} % con C = {f(P.clipNorm)}.{' '}
+              {alt.acc < accDp - 0.01
+                ? 'En esta configuración, el recorte más agresivo empeoró la precisión.'
+                : alt.acc > accDp + 0.01
+                  ? 'En esta configuración la precisión mejoró: el menor ruido absoluto compensó el sesgo (con más pasos o una η mayor el resultado puede cambiar).'
+                  : 'En esta configuración la precisión apenas cambió (diferencia ≤ 1 punto); fíjate en la pérdida y en la fracción recortada.'}
+            </p>
+          )}
+        </>
+      }
+    />
+  );
+}
+
 export default function DP5DPSGD() {
   const [p, setP, reset] = usePersistentState<Params>(`${ID}.params`, DEFAULTS);
   const [res, setRes] = usePersistentState<Result | null>(`${ID}.result`, null, false);
@@ -179,7 +248,7 @@ export default function DP5DPSGD() {
     setTimeout(() => {
       try {
         const { train, test } = makeData(p);
-        const cfg = { ...p, delta: DELTA };
+        const cfg = { ...p, adjacency: adjOf(p), delta: DELTA };
         const sgd = trainLogistic('sgd', train, test, cfg, { traceFirst: 3 });
         const dp = trainLogistic('dpsgd', train, test, cfg, { traceFirst: 3 });
         setRes({ params: p, train, test, sgd, dp });
@@ -205,8 +274,9 @@ export default function DP5DPSGD() {
           ],
           privacyGuarantee:
             dp.accounting.status === 'computed'
-              ? `(${f(dp.accounting.epsilon, 3)}, ${DELTA})-DP a nivel de registro, cota RDP conservadora bajo los supuestos indicados (lote completo, sin submuestreo).`
-              : null,
+              ? `(${f(dp.accounting.epsilon, 3)}, ${DELTA})-DP a nivel de registro (vecindad ${adjOf(p) === 'replace' ? 'por reemplazo' : 'añadir/eliminar'}), cota RDP conservadora sin amplificación con ${dp.accounting.details.compositions} composiciones, bajo los supuestos indicados.`
+              : `No calculado: ${dp.accounting.reason}`,
+          privacy: privacyRecord(dpsgdSpec(adjOf(p)), dp.accounting, { clipNorm: p.clipNorm, noiseMultiplier: p.noiseMultiplier }),
         });
       } catch (e) {
         setRunError(e instanceof Error ? e.message : String(e));
@@ -268,12 +338,17 @@ export default function DP5DPSGD() {
           <ConfigSection title="Datos y modelo">
             <ParamSlider label="Tamaño del conjunto (n)" ariaLabel="Tamaño del conjunto" value={p.n} min={40} max={3000} step={10} onChange={(n) => set({ n })} help={`75 % entrenamiento (${nTrain}), 25 % prueba.`} />
             <ParamSlider label={<Term k="learningRate">Tasa de aprendizaje η</Term>} ariaLabel="Tasa de aprendizaje" value={p.learningRate} min={0.01} max={5} step={0.01} onChange={(learningRate) => set({ learningRate })} />
-            <ParamSlider label={<Term k="batchSize">Tamaño de lote B</Term>} ariaLabel="Tamaño de lote" value={p.batchSize} min={1} max={nTrain} step={1} onChange={(batchSize) => set({ batchSize })} help={`B = ${nTrain} (lote completo) permite calcular una cota formal de ε.`} />
+            <ParamSlider label={<Term k="batchSize">Tamaño de lote B</Term>} ariaLabel="Tamaño de lote" value={p.batchSize} min={1} max={nTrain} step={1} onChange={(batchSize) => set({ batchSize })} help={
+                adjOf(p) === 'replace'
+                  ? `Con reemplazo, cada registro participa en ≤ ⌈T/⌊n/B⌋⌉ = ${p.batchSize <= nTrain && p.batchSize >= 1 ? maxParticipationsPerRecord(nTrain, p.batchSize, Math.max(1, p.steps)) : '—'} pasos.`
+                  : `Con añadir/eliminar solo B = ${nTrain} (lote completo) permite una cota formal de ε.`
+              } />
             <ParamSlider label="Pasos de entrenamiento" ariaLabel="Pasos de entrenamiento" value={p.steps} min={1} max={2000} step={1} onChange={(steps) => set({ steps })} />
           </ConfigSection>
           <ConfigSection title="Privacidad (DP-SGD)">
             <ParamSlider label={<Term k="clipping">Norma de recorte C</Term>} ariaLabel="Norma de recorte" value={p.clipNorm} min={0.01} max={5} step={0.01} onChange={(clipNorm) => set({ clipNorm })} />
             <ParamSlider label={<Term k="noiseMultiplier">Multiplicador de ruido σ</Term>} ariaLabel="Multiplicador de ruido" value={p.noiseMultiplier} min={0} max={10} step={0.05} onChange={(noiseMultiplier) => set({ noiseMultiplier })} help={`Desv. típica del ruido sobre la suma: σ·C = ${f(p.noiseMultiplier * p.clipNorm)}; sobre la media: σ·C/B = ${f((p.noiseMultiplier * p.clipNorm) / Math.max(1, p.batchSize), 4)}.`} />
+            <AdjacencyChoice value={adjOf(p)} onChange={(adjacency) => set({ adjacency })} unitLabel="registro (ejemplo)" />
             <SeedControl value={p.seed} onChange={(seed) => set({ seed })} />
             <Button size="sm" variant="outline" className="w-full" onClick={() => set({ batchSize: nTrain, steps: Math.min(p.steps, 100), learningRate: Math.max(p.learningRate, 1) })}>
               Usar lote completo (B = n de entrenamiento)
@@ -314,6 +389,9 @@ export default function DP5DPSGD() {
               </VisualCard>
             )}
             <VisualCard title="Entrenamiento: SGD frente a DP-SGD" description="Mismos datos, misma secuencia de lotes y misma inicialización" actions={<IntegrityBadge kind="empirical" />}>
+              <p className="mb-3 rounded-md bg-muted px-3 py-2 text-[11px] leading-snug">
+                <strong>Instrumentación fuera de la garantía:</strong> la pérdida de entrenamiento se calcula sin ruido sobre los datos privados; en un despliegue real no se publicaría. El conjunto de prueba se trata como datos independientes NO protegidos. La garantía cubre solo los parámetros publicados θ₁…θ_T.
+              </p>
               <div className="grid gap-4 md:grid-cols-2">
                 <ChartFrame
                   title="Pérdida de entrenamiento"
@@ -406,28 +484,8 @@ export default function DP5DPSGD() {
               <StatTile label="Pérdida DP-SGD" value={f(last(res.dp).testLoss)} tone="dp" />
               <StatTile label="Gradientes recortados" value={f(res.dp.clippedFraction * 100, 1) + ' %'} className="col-span-2" sub="fracción de todos los gradientes por ejemplo en DP-SGD" />
             </div>
-            <div className="rounded-md border p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold">Presupuesto de privacidad ε</span>
-                <IntegrityBadge kind={acc.status === 'computed' ? 'formal' : 'not-computed'} />
-              </div>
-              {acc.status === 'computed' ? (
-                <>
-                  <p className="num text-2xl font-semibold text-dp">ε ≈ {f(acc.epsilon, 3)}</p>
-                  <p className="text-xs text-muted-foreground">con δ = {DELTA}, α óptimo = {f(acc.optimalAlpha, 2)} (RDP, sin amplificación por submuestreo)</p>
-                  <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] leading-snug">
-                    {acc.assumptions.map((a) => (
-                      <li key={a}>{a}</li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <>
-                  <p className="text-2xl font-semibold text-destructive">No calculado</p>
-                  <p className="mt-1 text-xs leading-relaxed">{acc.reason}</p>
-                </>
-              )}
-            </div>
+            <PrivacyModelCard spec={dpsgdSpec(adjOf(res.params))} accounting={acc} compact />
+            <ClipCheck res={res} />
             <Callout kind="info" title="Qué observar">
               Más ruido (σ) o un recorte muy agresivo (C pequeño) suelen reducir la precisión o ralentizar la convergencia. El recorte también introduce sesgo: los ejemplos con gradientes grandes pierden influencia.
             </Callout>
@@ -447,7 +505,8 @@ export default function DP5DPSGD() {
               'ḡᵢ = gᵢ · min(1, C / ‖gᵢ‖₂)',
               'g̃ = (Σᵢ ḡᵢ + N(0, σ²C²I)) / B',
               'θ ← θ − η · g̃',
-              'Contador (solo B = n): ε = min_α [ T·α/(2σ²) + ln(1/δ)/(α − 1) ]',
+              'Sensibilidad por paso: Δ₂ = k·C (k = 1 añadir/eliminar, k = 2 reemplazar); z = σ/k',
+              'Contador RDP: ε = min_α [ T_c·α/(2z²) + ln(1/δ)/(α − 1) ],  T_c = T (lote completo) o ⌈T/⌊n/B⌋⌉ (reemplazo con mini-lotes)',
             ]}
             inputs={[
               { label: 'C', value: f(res.params.clipNorm, 4) },
@@ -456,6 +515,7 @@ export default function DP5DPSGD() {
               { label: 'η', value: f(res.params.learningRate, 4) },
               { label: 'T (pasos)', value: res.params.steps },
               { label: 'n entrenamiento', value: res.train.length },
+              { label: 'Vecindad', value: adjOf(res.params) === 'replace' ? 'reemplazar (k = 2)' : 'añadir/eliminar (k = 1)' },
             ]}
             intermediates={[
               { label: `θ antes del paso ${trace.step}`, value: trace.paramsBefore.map((v) => f(v, 4)).join(', ') },
@@ -469,13 +529,17 @@ export default function DP5DPSGD() {
               { label: 'θ final SGD', value: res.sgd.params.map((v) => f(v, 3)).join(', ') },
               { label: 'θ final DP-SGD', value: res.dp.params.map((v) => f(v, 3)).join(', ') },
               { label: 'Evaluaciones de gradiente', value: res.dp.gradEvals },
+              { label: 'Composiciones contabilizadas', value: acc?.status === 'computed' ? acc.details.compositions : '—' },
               { label: 'ε', value: acc?.status === 'computed' ? f(acc.epsilon, 4) : 'No calculado' },
             ]}
             assumptions={[
-              'Unidad de privacidad: un registro (record-level DP), vecindad añadir/eliminar.',
-              'La suma de gradientes recortados tiene sensibilidad L2 = C.',
-              'Los lotes se forman barajando por época; los contadores estándar con amplificación asumen muestreo de Poisson, por eso con B < n no se calcula ε.',
+              'Unidad de privacidad: un registro (record-level DP).',
+              'Añadir/eliminar: la suma de gradientes recortados tiene sensibilidad L2 = C; reemplazar: 2C.',
+              'Los lotes se forman barajando por época (calendario independiente de los datos). Los contadores con amplificación asumen muestreo de Poisson y no se implementan.',
+              'Añadir/eliminar con B < n: el calendario depende de n, que cambia entre vecinos ⇒ No calculado.',
+              'Reemplazar (n público): cada registro participa como mucho una vez por época ⇒ ⌈T/⌊n/B⌋⌉ composiciones gaussianas con Δ₂ = 2C (cota sin amplificación).',
               'Con B = n cada paso es un mecanismo gaussiano sobre todos los datos; la composición se acota con RDP.',
+              'Las métricas de entrenamiento mostradas no están cubiertas por la garantía.',
               'La garantía formal requiere aleatoriedad segura; aquí se usa un PRNG con semilla.',
             ]}
           />
@@ -495,8 +559,8 @@ export default function DP5DPSGD() {
         ],
       }}
       reflection={{
-        question: 'Pulsa «Usar lote completo» y entrena con σ = 0,5, 1 y 4. ¿Cómo cambian el ε calculado y la precisión? ¿Por qué el laboratorio se niega a mostrar ε cuando B < n?',
-        hint: 'Con más ruido ε disminuye (más privacidad) pero el gradiente es menos fiable. Con mini-lotes, el ε correcto depende de cómo se muestrean los lotes (amplificación por submuestreo); usar una fórmula que no corresponde al muestreo real daría una cifra engañosa.',
+        question: 'Pulsa «Usar lote completo» y entrena con σ = 0,5, 1 y 4. ¿Cómo cambian el ε calculado y la precisión? Después cambia la vecindad a «Reemplazar» con mini-lotes: ¿por qué ahora sí aparece un ε y por qué con añadir/eliminar no?',
+        hint: 'Con más ruido ε disminuye (más privacidad) pero el gradiente es menos fiable. Con reemplazo n es público y el calendario de lotes no depende de los datos: cada registro participa como mucho una vez por época, con sensibilidad 2C. Con añadir/eliminar el calendario cambia con n y la cota ajustada requeriría amplificación por submuestreo (muestreo de Poisson), no implementada.',
       }}
     />
   );

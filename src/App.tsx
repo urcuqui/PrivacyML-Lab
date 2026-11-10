@@ -13,12 +13,14 @@ const Journey = lazy(() => import('@/modules/journey/Journey'));
 const KnowledgeCheck = lazy(() => import('@/modules/quiz/KnowledgeCheck'));
 const HistoryPage = lazy(() => import('@/modules/history/HistoryPage'));
 const Limits = lazy(() => import('@/modules/limits/Limits'));
+const Agentic = lazy(() => import('@/modules/agentic/Agentic'));
 
 const NAV: { label: string; path: string; match: (p: string) => boolean }[] = [
   { label: 'Inicio', path: '/', match: (p) => p === '/' },
   { label: 'Privacidad Diferencial', path: '/dp/1', match: (p) => p.startsWith('/dp') },
   { label: 'Aprendizaje Federado', path: '/fl/1', match: (p) => p.startsWith('/fl') },
   { label: 'Experimento combinado', path: '/combined', match: (p) => p.startsWith('/combined') },
+  { label: 'IA agéntica', path: '/agentic', match: (p) => p.startsWith('/agentic') },
   { label: 'Evaluación', path: '/quiz', match: (p) => p.startsWith('/quiz') },
 ];
 
@@ -52,7 +54,7 @@ function Header({ path }: { path: string }) {
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-[1500px] items-center gap-3 px-4">
         <Logo />
-        <nav aria-label="Navegación principal" className="ml-4 hidden items-center gap-0.5 lg:flex">
+        <nav aria-label="Navegación principal" className="ml-4 hidden items-center gap-0.5 xl:flex">
           {NAV.map((n) => (
             <a key={n.path} href={href(n.path)} aria-current={n.match(path) ? 'page' : undefined} className={cn('rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent', n.match(path) ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground')}>
               {n.label}
@@ -73,13 +75,13 @@ function Header({ path }: { path: string }) {
           <Button variant="ghost" size="icon" aria-label={theme === 'dark' ? 'Activar tema claro' : 'Activar tema oscuro'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? <Sun /> : <Moon />}
           </Button>
-          <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Abrir menú" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <Button variant="ghost" size="icon" className="xl:hidden" aria-label="Abrir menú" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
             <Menu />
           </Button>
         </div>
       </div>
       {open && (
-        <nav aria-label="Navegación móvil" className="border-t px-4 py-2 lg:hidden">
+        <nav aria-label="Navegación móvil" className="border-t px-4 py-2 xl:hidden">
           {NAV.map((n) => (
             <a key={n.path} href={href(n.path)} onClick={() => setOpen(false)} className={cn('block rounded-md px-3 py-2 text-sm', n.match(path) ? 'bg-accent font-medium' : 'text-muted-foreground')}>
               {n.label}
@@ -180,6 +182,8 @@ function Page({ path }: { path: string }): ReactNode {
       return <HistoryPage />;
     case '/limits':
       return <Limits />;
+    case '/agentic':
+      return <Agentic />;
     default:
       return (
         <div className="rounded-lg border p-6">

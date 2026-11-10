@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ArrowRight, Compass, History, ShieldCheck, Network, Layers, GraduationCap, RefreshCw, ShieldQuestion } from 'lucide-react';
+import { ArrowRight, Compass, History, ShieldCheck, Network, Layers, GraduationCap, RefreshCw, ShieldQuestion, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ParamChoice } from '@/components/lab/ParamControl';
 import { IntegrityBadge } from '@/components/lab/IntegrityBadge';
@@ -164,6 +164,13 @@ export default function Overview() {
           <GraduationCap className="h-4 w-4 text-primary" aria-hidden />
           <span>
             <strong>Reto final:</strong> elige una arquitectura de ML con privacidad para una organización ficticia con requisitos de precisión, privacidad y comunicación.
+          </span>
+          <ArrowRight className="ml-auto h-4 w-4" aria-hidden />
+        </a>
+        <a href={href('/agentic')} className="mt-3 flex items-center gap-2 rounded-lg border border-dashed bg-card p-3 text-sm hover:bg-accent">
+          <Bot className="h-4 w-4 text-primary" aria-hidden />
+          <span>
+            <strong>Más allá del modelo:</strong> privacidad en IA agéntica. Por qué la privacidad a nivel de modelo no implica automáticamente privacidad a nivel de sistema (memoria, herramientas, fronteras de confianza).
           </span>
           <ArrowRight className="ml-auto h-4 w-4" aria-hidden />
         </a>

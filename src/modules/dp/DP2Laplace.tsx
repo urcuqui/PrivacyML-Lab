@@ -7,11 +7,13 @@ import { ConfigSection, ParamChoice, ParamSlider, SeedControl } from '@/componen
 import { Callout, ErrorList, Formula, ShowCalculations, StatTile } from '@/components/lab/Blocks';
 import { RunTimeline } from '@/components/lab/RunTimeline';
 import { Term } from '@/components/lab/Term';
+import { ContextualCheck, PrivacyModelCard } from '@/components/lab/PrivacyModel';
+import { laplaceCountSpec } from '@/lib/privacy/model';
 import { Button } from '@/components/ui/button';
 import { ChartFrame } from '@/components/charts/ChartFrame';
 import { C, axisProps, gridProps, legendProps, tooltipProps, fmtNum } from '@/components/charts/chartTheme';
 import { usePersistentState } from '@/lib/store';
-import { useRuns } from '@/lib/runs';
+import { privacyRecord, useRuns, type ExperimentRun } from '@/lib/runs';
 import { createSeededRng, deriveSeed } from '@/lib/rng/rng';
 import { laplaceCdf, laplaceMechanism, laplacePdf, laplaceScale, simulateLaplace, type LaplaceRelease, type LaplaceSimulation } from '@/lib/dp/laplace';
 import { histogram } from '@/lib/stats';
@@ -89,11 +91,57 @@ function NumberLine({ r, step }: { r: LaplaceRelease; step: number }) {
   );
 }
 
+const EPS_KEY = LABELS.epsilon;
+const ERR_KEY = 'Error absoluto';
+
+/** Pregunta contextual: errores similares con ε distintos (usa las ejecuciones reales del estudiante). */
+function EpsilonCheck({ res, runs }: { res: Result; runs: ExperimentRun[] }) {
+  const pts = runs
+    .map((r) => ({ name: r.name, eps: r.params[EPS_KEY], err: r.results[ERR_KEY] }))
+    .filter((x): x is { name: string; eps: number; err: number } => typeof x.eps === 'number' && typeof x.err === 'number');
+  // Par con ε distintos y errores más parecidos (relativamente).
+  let best: { a: (typeof pts)[number]; b: (typeof pts)[number]; score: number } | null = null;
+  for (let i = 0; i < pts.length; i++)
+    for (let j = i + 1; j < pts.length; j++) {
+      const a = pts[i];
+      const b = pts[j];
+      if (a.eps === b.eps) continue;
+      const score = Math.abs(a.err - b.err) / Math.max(a.err, b.err, 1e-9);
+      if (!best || score < best.score) best = { a, b, score };
+    }
+  const b = res.single.scale;
+  const x = Math.max(res.single.absError, 1e-9);
+  const pWithin = (scale: number) => 1 - Math.exp(-x / scale);
+  return (
+    <ContextualCheck
+      question="¿Por qué dos ejecuciones con diferentes valores de ε pueden producir errores similares?"
+      explanation={
+        <>
+          {best ? (
+            <p>
+              En tu línea temporal, «{best.a.name}» (ε = {f(best.a.eps)}) tuvo un error absoluto de {f(best.a.err, 3)} y «{best.b.name}» (ε = {f(best.b.eps)}) tuvo {f(best.b.err, 3)}. Sus errores esperados son muy
+              distintos: E|ruido| = 1/ε = {f(1 / best.a.eps, 3)} frente a {f(1 / best.b.eps, 3)}.{' '}
+              {best.score < 0.25 ? 'Aun así, los errores observados se parecen: cada publicación es UNA muestra aleatoria.' : 'En este par los errores sí difieren bastante, pero podrían haberse parecido por azar.'}
+            </p>
+          ) : (
+            <p>Aún no tienes dos ejecuciones con ε distintos en la línea temporal. Ejecuta el mecanismo con, por ejemplo, ε = 0,5 y ε = 2 (y varias semillas) para comparar sus errores absolutos.</p>
+          )}
+          <p>
+            ε fija la <strong>distribución</strong> del ruido, no el valor de cada extracción. En tu ejecución actual (ε = {f(res.params.epsilon)}, b = {f(b, 3)}) el error fue {f(res.single.absError, 3)}. La probabilidad de un
+            error ≤ {f(x, 3)} es 1 − e^(−x/b) = {f(pWithin(b) * 100, 1)} % con este ε, y {f(pWithin(1 / (res.params.epsilon * 4)) * 100, 1)} % con un ε cuatro veces mayor: ambos sucesos son plausibles, así que una sola
+            publicación no permite distinguir el nivel de privacidad. Las {res.params.reps} repeticiones muestran la diferencia: error medio {f(res.sim.meanAbsError, 3)} (teórico {f(b, 3)}).
+          </p>
+        </>
+      }
+    />
+  );
+}
+
 export default function DP2Laplace() {
   const [p, setP, reset] = usePersistentState<Params>(`${ID}.params`, DEFAULTS);
   const [res, setRes] = usePersistentState<Result | null>(`${ID}.result`, null, false);
   const [step, setStep] = useState(5);
-  const { addRun } = useRuns(ID);
+  const { addRun, runs } = useRuns(ID);
   const set = (patch: Partial<Params>) => setP((prev) => ({ ...prev, ...patch }));
   const errors = validate(p);
   const scale = p.epsilon > 0 ? laplaceScale(1, p.epsilon) : NaN;
@@ -120,6 +168,7 @@ export default function DP2Laplace() {
       assumptions: ['Consulta de conteo con sensibilidad Δ = 1 (cada persona aparece una sola vez).', 'Ruido Laplace(0, 1/ε) muestreado por inversión de la CDF.'],
       limitations: ['Aleatoriedad pseudoaleatoria con semilla (no segura).', 'Implementación en punto flotante, sin protección frente a ataques de bits menos significativos.'],
       privacyGuarantee: `ε-DP pura con ε = ${p.epsilon} para UNA publicación (bajo supuestos de aleatoriedad ideal). Las ${p.reps} repeticiones simuladas son una herramienta didáctica: publicarlas todas costaría ${p.reps}·ε.`,
+      privacy: privacyRecord(laplaceCountSpec('add-remove'), { status: 'pure', epsilon: p.epsilon }),
     });
   };
 
@@ -269,6 +318,8 @@ export default function DP2Laplace() {
             <Callout kind="warn" title="Las repeticiones son didácticas">
               Ver {res.params.reps} publicaciones de la misma consulta solo es posible en el laboratorio. En un sistema real, cada publicación consume ε del presupuesto (Experimento 4).
             </Callout>
+            <PrivacyModelCard spec={laplaceCountSpec('add-remove')} pureEpsilon={res.params.epsilon} compact />
+            <EpsilonCheck res={res} runs={runs} />
           </>
         ) : (
           <p className="text-sm text-muted-foreground">Aún no hay resultados.</p>

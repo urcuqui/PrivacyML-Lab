@@ -41,6 +41,8 @@ const FEDAVG = weightedAverage([[0.2], [0.6]], [100, 300]); // = 0.5
 const COMM = estimateCommunication({ numParams: 3, numClients: 10, participation: 0.5, rounds: 20 }); // 2400 B
 const EPS_S1 = gaussianCompositionEpsilon({ noiseMultiplier: 1, steps: 20, delta: 1e-3 }).epsilon;
 const EPS_S2 = gaussianCompositionEpsilon({ noiseMultiplier: 2, steps: 20, delta: 1e-3 }).epsilon;
+/** Misma σ = 1 y 20 rondas, pero vecindad por reemplazo (Δ₂ = 2C ⇒ multiplicador efectivo σ/2), peor caso: el cliente participa en todas las rondas. */
+const EPS_REP = gaussianCompositionEpsilon({ noiseMultiplier: 1, steps: 20, delta: 1e-3, sensitivityMultiple: 2 }).epsilon;
 
 export const QUESTIONS: Record<QuizModule, QuizQuestion[]> = {
   dp: [
@@ -192,7 +194,7 @@ export const QUESTIONS: Record<QuizModule, QuizQuestion[]> = {
           id: 'b',
           text: 'Para acotar la influencia de cada ejemplo (la sensibilidad de la suma es C), de modo que el ruido N(0, σ²C²) pueda calibrarse.',
           correct: true,
-          explanation: 'Correcto. Sin recorte, un único ejemplo atípico podría tener un gradiente arbitrariamente grande y ninguna cantidad finita de ruido lo ocultaría. Con recorte, añadir o quitar un ejemplo cambia la suma como mucho en C.',
+          explanation: 'Correcto. Sin recorte, un único ejemplo atípico podría tener un gradiente arbitrariamente grande y ninguna cantidad finita de ruido lo ocultaría. Con recorte, añadir o quitar un ejemplo cambia la suma como mucho en C; si los vecinos se definen por REEMPLAZO, la cota es 2C (g → g′ con ‖g‖, ‖g′‖ ≤ C) y el mismo ruido protege menos.',
         },
         {
           id: 'c',
@@ -204,7 +206,7 @@ export const QUESTIONS: Record<QuizModule, QuizQuestion[]> = {
           id: 'd',
           text: 'Para que el valor de ε pueda calcularse sin un contador de privacidad.',
           correct: false,
-          explanation: 'Incorrecto. Incluso con recorte y ruido, el ε total de muchos pasos requiere un contador (p. ej. RDP). Por eso el laboratorio solo muestra ε cuando la contabilidad implementada es válida (lote completo).',
+          explanation: 'Incorrecto. Incluso con recorte y ruido, el ε total de muchos pasos requiere un contador (p. ej. RDP). Por eso el laboratorio solo muestra ε cuando la contabilidad implementada es válida: con vecindad añadir/eliminar, solo con lote completo; con vecindad por reemplazo (n público), también con mini-lotes.',
         },
       ],
       learnMore: [{ label: 'Experimento 5 — DP-SGD', path: '/dp/5' }],
@@ -295,7 +297,7 @@ export const QUESTIONS: Record<QuizModule, QuizQuestion[]> = {
           id: 'b',
           text: `${fmt(FEDAVG.params[0])}.`,
           correct: true,
-          explanation: `Correcto. N = 400; pesos = 100/400 = ${fmt(FEDAVG.weights[0])} y 300/400 = ${fmt(FEDAVG.weights[1])}. w = ${fmt(FEDAVG.weights[0])}·0,2 + ${fmt(FEDAVG.weights[1])}·0,6 = ${fmt(FEDAVG.params[0])}.`,
+          explanation: `Correcto. N = 400; pesos = 100/400 = ${fmt(FEDAVG.weights[0])} y 300/400 = ${fmt(FEDAVG.weights[1])}. w = ${fmt(FEDAVG.weights[0])}·0,2 + ${fmt(FEDAVG.weights[1])}·0,6 = ${fmt(FEDAVG.params[0])}. Nota: DP-FedAvg usa en cambio pesos uniformes 1/m̄, porque con pesos n_k/N un cliente grande tendría más influencia (más sensibilidad) y n_k sería información privada.`,
         },
         {
           id: 'c',
@@ -453,7 +455,7 @@ export const QUESTIONS: Record<QuizModule, QuizQuestion[]> = {
       id: 'c-q3',
       concept: 'Contabilidad de privacidad',
       computed: true,
-      prompt: `Con participación del 100 %, 20 rondas y δ = 10⁻³, el contador RDP del laboratorio da ε ≈ ${fmt(EPS_S1, 2)} para σ = 1 y ε ≈ ${fmt(EPS_S2, 2)} para σ = 2. Si bajas la participación al 30 %, el laboratorio muestra «No calculado». ¿Por qué?`,
+      prompt: `Con participación del 100 %, 20 rondas, δ = 10⁻³ y vecindad añadir/eliminar a nivel de cliente, el contador RDP del laboratorio da ε ≈ ${fmt(EPS_S1, 2)} para σ = 1. Si bajas la participación al 30 % manteniendo añadir/eliminar, muestra «No calculado»; si en cambio eliges vecindad por reemplazo (K público), muestra ε ≈ ${fmt(EPS_REP, 2)} con cualquier participación. ¿Por qué?`,
       options: [
         {
           id: 'a',
@@ -463,15 +465,15 @@ export const QUESTIONS: Record<QuizModule, QuizQuestion[]> = {
         },
         {
           id: 'b',
-          text: 'Porque la cota válida exige contabilizar el muestreo de clientes con un contador específico que no está implementado; el laboratorio prefiere no inventar un ε.',
+          text: 'Con añadir/eliminar y muestreo parcial, la selección depende de K y una cota válida exigiría un contador de muestreo no implementado; con reemplazo, la selección no depende de los datos y cabe una cota conservadora (peor caso: T rondas con Δ₂ = 2C).',
           correct: true,
-          explanation: 'Correcto. La integridad exige mostrar solo valores con un método válido. El contador implementado (RDP gaussiano sin submuestreo) solo es aplicable cuando todos los clientes participan en todas las rondas.',
+          explanation: `Correcto. La integridad exige mostrar solo valores con un método válido. Con reemplazo, un cliente puede pasar de una actualización recortada Δ a otra Δ′ opuesta (‖Δ − Δ′‖ ≤ 2C), así que el multiplicador efectivo es σ/2 y el ε es mayor (${fmt(EPS_REP, 2)} frente a ${fmt(EPS_S1, 2)}). Con añadir/eliminar y participación parcial el laboratorio prefiere no inventar un ε.`,
         },
         {
           id: 'c',
           text: 'Porque ε solo depende de σ, y σ no ha cambiado.',
           correct: false,
-          explanation: 'Incorrecto. ε depende de σ, del número de pasos, de δ y del esquema de muestreo. Cambiar la participación cambia el mecanismo.',
+          explanation: 'Incorrecto. ε depende de σ, del número de pasos, de δ, del esquema de muestreo y de la definición de vecinos (que fija la sensibilidad: C o 2C). Cambiar la participación o la vecindad cambia el análisis.',
         },
         {
           id: 'd',

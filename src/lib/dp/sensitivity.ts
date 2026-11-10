@@ -3,7 +3,10 @@
  * - Vecindad "añadir/eliminar" (unbounded DP): D' = D ± una persona.
  * - Vecindad "reemplazar" (bounded DP): D' = D con una persona sustituida; n es público.
  */
-export type Neighbouring = 'add-remove' | 'replace';
+import { clippedSumSensitivityMultiple, type Adjacency } from '../privacy/model';
+
+/** Alias histórico: la vecindad se define de forma centralizada en lib/privacy/model.ts. */
+export type Neighbouring = Adjacency;
 
 export interface SensitivityResult {
   value: number;
@@ -56,4 +59,47 @@ export const clamp = (x: number, lo: number, hi: number): number => Math.min(hi,
 export function clampedMean(values: readonly number[], lower: number, upper: number): number {
   if (!values.length) return NaN;
   return values.reduce((s, v) => s + clamp(v, lower, upper), 0) / values.length;
+}
+
+/**
+ * Proporción count/n con n público. Solo está definida bajo vecindad por REEMPLAZO:
+ * reemplazar una persona cambia el conteo como mucho en 1 ⇒ Δ₁ = 1/n.
+ * Bajo añadir/eliminar, n no es público y dividir por el n real no es un post-procesado válido.
+ */
+export function proportionSensitivity(n: number): SensitivityResult {
+  if (!Number.isInteger(n) || n < 1) throw new RangeError('n debe ser un entero positivo');
+  return {
+    value: 1 / n,
+    formula: 'Δ = 1/n (vecindad por reemplazo, n público)',
+    assumptions: ['Vecindad por reemplazo: n es público y no cambia.', 'Cada persona aparece una sola vez.'],
+  };
+}
+
+/**
+ * Media bajo añadir/eliminar: NO tiene una sensibilidad global útil si n no es público
+ * (con n = 1 frente a n = 2 la media puede cambiar en U − L). Se lanza un error explicativo:
+ * la alternativa correcta es publicar suma y conteo con ruido por separado (y dividir después).
+ */
+export function boundedMeanSensitivityAddRemove(): never {
+  throw new RangeError(
+    'La media con n desconocido no tiene sensibilidad acotada útil bajo añadir/eliminar: publica la suma acotada y el conteo con ruido por separado (repartiendo ε) y divide después (post-procesado).',
+  );
+}
+
+/**
+ * Sensibilidad L2 de la SUMA de contribuciones recortadas a norma ≤ C:
+ * C bajo añadir/eliminar, 2C bajo reemplazo. Válida solo si el denominador es una constante pública.
+ */
+export function clippedSumL2Sensitivity(clipNorm: number, adjacency: Adjacency): SensitivityResult {
+  if (!(clipNorm > 0)) throw new RangeError('La norma de recorte C debe ser positiva');
+  const k = clippedSumSensitivityMultiple(adjacency);
+  return {
+    value: k * clipNorm,
+    formula: adjacency === 'replace' ? 'Δ₂ = 2C (v → v′ con ‖v‖, ‖v′‖ ≤ C ⇒ ‖v − v′‖ ≤ 2C)' : 'Δ₂ = C (se añade o elimina un vector de norma ≤ C)',
+    assumptions: [
+      'Cada contribución se recorta a norma L2 ≤ C antes de sumar.',
+      'Cada unidad protegida aporta UNA contribución a la suma (por paso o ronda).',
+      'El denominador de la media es una constante pública, no el número real de contribuciones.',
+    ],
+  };
 }

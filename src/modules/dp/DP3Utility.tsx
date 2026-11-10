@@ -7,20 +7,32 @@ import { Callout, ErrorList, ShowCalculations, StatTile } from '@/components/lab
 import { RunTimeline } from '@/components/lab/RunTimeline';
 import { IntegrityBadge } from '@/components/lab/IntegrityBadge';
 import { Term } from '@/components/lab/Term';
+import { PrivacyModelCard } from '@/components/lab/PrivacyModel';
+import { boundedMeanSpec, laplaceCountSpec } from '@/lib/privacy/model';
 import { Button } from '@/components/ui/button';
 import { ChartFrame } from '@/components/charts/ChartFrame';
 import { C, axisProps, gridProps, legendProps, tooltipProps, fmtNum } from '@/components/charts/chartTheme';
 import { usePersistentState } from '@/lib/store';
-import { useRuns } from '@/lib/runs';
+import { privacyRecord, useRuns } from '@/lib/runs';
 import { runSimTask } from '@/lib/useSimTask';
 import type { DpUtilityRow } from '@/lib/tasks';
 import { createSeededRng, deriveSeed } from '@/lib/rng/rng';
 import { laplacePdf, laplacePrivacyLoss, laplaceScale, simulateLaplace } from '@/lib/dp/laplace';
-import { boundedMeanSensitivity, clampedMean } from '@/lib/dp/sensitivity';
+import { boundedMeanSensitivity, boundedMeanSensitivityAddRemove, clampedMean } from '@/lib/dp/sensitivity';
 import { histogram, mean } from '@/lib/stats';
 import { f, fromLabeled, toLabeled } from './common';
 
 const ID = 'dp3';
+
+/** Mensaje explicativo de por qué la media no tiene Δ útil bajo añadir/eliminar. */
+const addRemoveMeanNote = (() => {
+  try {
+    boundedMeanSensitivityAddRemove();
+    return '';
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+})();
 const TITLE = 'Privacidad frente a utilidad';
 const EPSILONS = [0.1, 0.25, 0.5, 1, 2, 5, 10];
 
@@ -131,6 +143,9 @@ export default function DP3Utility() {
         ],
         limitations: ['Errores medidos empíricamente con un PRNG con semilla.', 'Edades sintéticas.'],
         privacyGuarantee: 'Cada publicación individual es ε-DP pura para su ε (bajo supuestos). Las repeticiones son didácticas y no constituyen una publicación real.',
+        privacy: meanRes
+          ? privacyRecord(boundedMeanSpec(p.lower, p.upper, p.n), { status: 'pure', epsilon: p.epsM })
+          : privacyRecord(laplaceCountSpec('add-remove'), { status: 'pure', epsilon: p.epsN }),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -304,6 +319,18 @@ export default function DP3Utility() {
                   <ReferenceLine x={p.upper} stroke={C.fg} strokeDasharray="3 3" />
                 </LineChart>
               </ChartFrame>
+              <div className="mt-3">
+                <PrivacyModelCard
+                  spec={boundedMeanSpec(p.lower, p.upper, p.n)}
+                  pureEpsilon={p.epsM}
+                  compact
+                  extra={
+                    <p className="rounded-md bg-muted p-2 text-xs">
+                      Esta Δ = (U − L)/n supone vecindad por <strong>reemplazo</strong> con n público. Bajo añadir/eliminar no es válida: {addRemoveMeanNote}
+                    </p>
+                  }
+                />
+              </div>
             </VisualCard>
           )}
         </>

@@ -108,6 +108,21 @@ const STAGES: Stage[] = [
     objectives: ['Resuelve el reto práctico: elige y justifica una configuración para una organización ficticia con requisitos explícitos.'],
     links: [{ label: 'Reto final', path: '/quiz' }],
   },
+  {
+    id: 's8',
+    title: 'Más allá del modelo (opcional)',
+    question: '¿Basta con entrenar un modelo con DP y FL para que un sistema agéntico sea privado?',
+    context:
+      'Un agente combina un modelo con memoria persistente, herramientas con acceso a datos y contenido de distinta confianza. La DP y el FL acotan lo que los parámetros entrenados revelan sobre los datos de entrenamiento; no gobiernan qué guarda la memoria ni qué devuelve una herramienta en tiempo de inferencia.',
+    objectives: [
+      'En el escenario de memoria, encuentra una política con la que el usuario B ya no recibe datos del usuario A.',
+      'En el escenario de herramientas, comprueba que activar «Entrenar el modelo con DP» no cambia el resultado de la exfiltración y explica por qué.',
+    ],
+    links: [
+      { label: 'Más allá del modelo: privacidad en IA agéntica', path: '/agentic' },
+      { label: 'Experimento combinado (FL + DP)', path: '/combined' },
+    ],
+  },
 ];
 
 export default function Journey() {

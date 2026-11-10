@@ -215,7 +215,7 @@ export const SCENARIOS: Scenario[] = [
         out.push({
           requirement: 'Garantía formal de privacidad',
           status: 'meets',
-          explanation: 'DP a nivel de cliente protege todo el historial de cada usuario. Con participación parcial, el ε debe calcularse con un contador que incluya el muestreo de clientes (no implementado en este laboratorio, por eso allí aparece «No calculado»).',
+          explanation: 'DP a nivel de cliente protege todo el historial de cada usuario. Con participación parcial, un ε ajustado debe calcularse con un contador que incluya el muestreo de clientes (amplificación), no implementado en este laboratorio: con vecindad añadir/eliminar allí aparece «No calculado», y con vecindad por reemplazo solo se obtiene una cota conservadora (peor caso: el cliente participa en todas las rondas, Δ₂ = 2C).',
         });
       // Precisión
       if (a === 'dpstats') out.push({ requirement: 'Precisión', status: 'fails', explanation: 'No se entrena un modelo de predicción.' });
@@ -256,7 +256,7 @@ export const SCENARIOS: Scenario[] = [
     discussion: [
       'Respuesta razonable: FL + DP + agregación segura, DP a nivel de CLIENTE (usuario), ruido bajo o medio, participación baja (muestreo de clientes) y pocas o moderadas épocas locales.',
       'Es el escenario en el que DP-FedAvg se usa en la práctica: muchos clientes hacen que el ruido por actualización media sea pequeño.',
-      'Con participación parcial, el ε real depende de la amplificación por submuestreo; requiere un contador específico. El laboratorio muestra «No calculado» en ese caso en lugar de inventar un número.',
+      'Con participación parcial, el ε ajustado depende de la amplificación por submuestreo y requiere un contador específico. Con vecindad añadir/eliminar el laboratorio muestra «No calculado» en lugar de inventar un número; con reemplazo da una cota conservadora sin amplificación, mucho mayor que el ε real.',
       'La agregación segura real debe tolerar abandonos de dispositivos: aquí solo se ilustra conceptualmente.',
     ],
   },

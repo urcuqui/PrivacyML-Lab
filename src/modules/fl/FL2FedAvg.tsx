@@ -5,6 +5,8 @@ import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, Tooltip as RTool
 import { ExperimentLayout, VisualCard } from '@/components/lab/ExperimentLayout';
 import { ConfigSection, ParamChoice, ParamSlider, SeedControl } from '@/components/lab/ParamControl';
 import { Callout, ErrorList, Formula, ShowCalculations, StatTile } from '@/components/lab/Blocks';
+import { ContextualCheck } from '@/components/lab/PrivacyModel';
+import { href } from '@/lib/router';
 import { RunTimeline } from '@/components/lab/RunTimeline';
 import { Term } from '@/components/lab/Term';
 import { Button } from '@/components/ui/button';
@@ -518,6 +520,7 @@ export default function FL2FedAvg() {
             )}
             {result.params.mode === 'non-iid' && <Callout kind="info">Con datos Non-IID, compara las fronteras locales: cada cliente tira del modelo hacia su propio óptimo (deriva de clientes).</Callout>}
             <Callout kind="warn">El servidor ve cada w<sub>k</sub> individual en el Paso 4. FedAvg no incluye por sí mismo ninguna protección de privacidad.</Callout>
+            <ContextualCheck question="¿Por qué un cliente con más datos tiene mayor influencia en FedAvg ponderado?" explanation={<WeightExplanation rt={rt} names={result.data.clients.map((c) => c.name)} />} />
           </>
         ) : (
           <p className="text-sm text-muted-foreground">Ejecuta la simulación para ver las observaciones.</p>
@@ -559,5 +562,43 @@ export default function FL2FedAvg() {
         hint: 'Prueba con Non-IID y fíjate en los pesos del Paso 5 y en la precisión por cliente del Paso 6.',
       }}
     />
+  );
+}
+
+/** Explicación basada en los pesos reales n_k/N de la ronda inspeccionada. */
+function WeightExplanation({ rt, names }: { rt: RoundTrace; names: string[] }) {
+  const m = rt.updates.length;
+  const top = rt.weights.reduce((a, b) => (b.weight > a.weight ? b : a));
+  const low = rt.weights.reduce((a, b) => (b.weight < a.weight ? b : a));
+  const equal = top.weight - low.weight < 1e-9;
+  const unweighted = rt.globalBefore.map((_, j) => rt.updates.reduce((s, u) => s + u.endParams[j], 0) / m);
+  const pull = rt.aggregated.map((v, j) => v - unweighted[j]);
+  const topUpdate = rt.updates.find((u) => u.clientId === top.clientId)!;
+  return (
+    <>
+      <p>
+        En la ronda {rt.round}, FedAvg calcula w = Σ (n_k/N)·w_k con N = <span className="num">{rt.N}</span> muestras de los {m} participantes. Cada cliente pesa en proporción a cuántos ejemplos aporta, de modo que el promedio equivale a
+        minimizar la pérdida media sobre <em>todos</em> los ejemplos, como si estuvieran juntos.
+      </p>
+      {equal ? (
+        <p>
+          Aquí todos los participantes tienen el mismo n_k, así que cada peso vale 1/{m} = <span className="num">{f(1 / m, 3)}</span> y la media ponderada coincide con la media simple. Sube la <strong>asimetría de tamaños</strong> y vuelve a
+          ejecutar para ver pesos distintos.
+        </p>
+      ) : (
+        <p>
+          El cliente con más influencia es <strong>{names[top.clientId]}</strong>: n_k = <span className="num">{top.n}</span>, peso <span className="num">{f(top.n, 0)}/{rt.N} = {f(top.weight, 3)}</span> (frente a 1/{m} ={' '}
+          <span className="num">{f(1 / m, 3)}</span> si todos pesaran igual; el menor peso es {f(low.weight, 3)} de {names[low.clientId]}). La diferencia entre el modelo ponderado y la media simple de los w_k es{' '}
+          <span className="num">[{pull.map((v) => f(v, 4)).join(', ')}]</span>: el agregado se desplaza hacia w de {names[top.clientId]} = <span className="num">[{topUpdate.endParams.map((v) => f(v, 3)).join(', ')}]</span>.
+        </p>
+      )}
+      <p>
+        Por eso DP-FedAvg usa ponderación <strong>uniforme</strong> (1/m̄): con pesos n_k/N un cliente grande tendría más influencia que C/m̄ (cambiaría la sensibilidad) y los propios n_k serían información privada. El{' '}
+        <a className="text-primary underline-offset-2 hover:underline" href={href('/combined')}>
+          experimento combinado
+        </a>{' '}
+        separa el efecto de esta ponderación del recorte y del ruido.
+      </p>
+    </>
   );
 }

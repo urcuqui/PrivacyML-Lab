@@ -1,11 +1,23 @@
 /**
  * Generadores de números aleatorios.
  *
- * IMPORTANTE: `createSeededRng` (Mulberry32) es un PRNG determinista pensado para
- * REPRODUCIBILIDAD EXPERIMENTAL. No es criptográficamente seguro y NO debe usarse
- * para desplegar mecanismos de privacidad diferencial reales.
- * `createCryptoRng` usa `crypto.getRandomValues`, más apropiado (aunque un despliegue
- * real además debe evitar las vulnerabilidades de punto flotante; ver README).
+ * REPRODUCIBILIDAD EDUCATIVA vs PRIVACIDAD EN PRODUCCIÓN
+ *
+ * - `createSeededRng` (Mulberry32) es un PRNG determinista de 32 bits pensado EXCLUSIVAMENTE para
+ *   repetir experimentos en clase. Su salida es predecible a partir de la semilla (que además se
+ *   muestra en la interfaz): NUNCA es adecuado para privacidad diferencial en producción.
+ *
+ * - `createCryptoRng` usa `crypto.getRandomValues` como fuente de bits. Esto resuelve la
+ *   predecibilidad, pero NO convierte los mecanismos del laboratorio en aptos para producción:
+ *     1. Los muestreos de Laplace (inversión de la CDF) y de Gauss (Box–Muller) se hacen en punto
+ *        flotante de doble precisión; el conjunto de valores representables tiene "huecos" que pueden
+ *        revelar el valor exacto (Mironov, 2012, "On significance of the least significant bits for DP").
+ *     2. Box–Muller con Math.log/Math.cos no es un muestreador exacto y Math.* no garantiza tiempo
+ *        constante ni resultados idénticos entre motores.
+ *     3. No se implementan contramedidas: snapping mechanism, mecanismos discretos
+ *        (Laplace/Gauss discretos de Canonne, Kamath y Steinke, 2020) ni muestreo exacto.
+ *   Un despliegue real debe usar una biblioteca de DP validada (p. ej. OpenDP, Google DP library,
+ *   Opacus / TF Privacy con su contador) con aleatoriedad segura y muestreadores resistentes.
  */
 export interface RNG {
   /** Uniforme en [0, 1). */
@@ -101,7 +113,11 @@ export function createSeededRng(seed: number): RNG {
   return buildRng(mulberry32(seed), 'seeded');
 }
 
-/** RNG basado en crypto.getRandomValues (no reproducible). */
+/**
+ * RNG basado en crypto.getRandomValues (no reproducible).
+ * NO es "listo para producción": ver la cabecera del módulo (los muestreadores siguen siendo
+ * de punto flotante y vulnerables a ataques sobre los bits menos significativos).
+ */
 export function createCryptoRng(): RNG {
   const buf = new Uint32Array(2);
   const source = () => {

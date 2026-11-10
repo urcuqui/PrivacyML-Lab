@@ -51,7 +51,7 @@ describe('Exportación', () => {
   };
   it('el informe incluye todos los apartados requeridos', () => {
     const md = buildReport([run]);
-    for (const s of ['Prueba', 'Semilla aleatoria', 'Parámetros', 'Resultados', 'Supuestos matemáticos', 'Garantía de privacidad', 'Limitaciones', 'Observaciones del estudiante', 'Mi observación']) {
+    for (const s of ['Prueba', 'Semilla aleatoria', 'Configuración del experimento', 'Resultados', 'Supuestos matemáticos', 'Modelo de privacidad', 'Limitaciones', 'Observaciones del estudiante', 'Mi observación']) {
       expect(md).toContain(s);
     }
   });

@@ -6,14 +6,16 @@ import { ExperimentLayout, VisualCard } from '@/components/lab/ExperimentLayout'
 import { ConfigSection, ParamChoice, ParamSlider, SeedControl } from '@/components/lab/ParamControl';
 import { Callout, ErrorList, ShowCalculations, StatTile } from '@/components/lab/Blocks';
 import { RunTimeline } from '@/components/lab/RunTimeline';
-import { IntegrityBadge } from '@/components/lab/IntegrityBadge';
 import { Term } from '@/components/lab/Term';
+import { PrivacyModelCard } from '@/components/lab/PrivacyModel';
+import { IntegrityBadge } from '@/components/lab/IntegrityBadge';
+import { compositionSpec } from '@/lib/privacy/model';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
 import { ChartFrame } from '@/components/charts/ChartFrame';
 import { C, SERIES, axisProps, gridProps, legendProps, tooltipProps, fmtNum } from '@/components/charts/chartTheme';
 import { usePersistentState } from '@/lib/store';
-import { useRuns } from '@/lib/runs';
+import { privacyRecord, useRuns } from '@/lib/runs';
 import { uid } from '@/lib/utils';
 import { createSeededRng, deriveSeed } from '@/lib/rng/rng';
 import { laplaceMechanism, simulateLaplace } from '@/lib/dp/laplace';
@@ -87,7 +89,8 @@ export default function DP4Composition() {
         'Vecindad por reemplazo con n público; sensibilidades: conteos Δ = 1, media acotada Δ = (U − L)/n.',
       ],
       limitations: ['La composición básica es una cota superior; existen teoremas de composición más ajustados (avanzada, RDP).', 'Aleatoriedad con semilla, no segura.'],
-      privacyGuarantee: `El conjunto de las ${next.entries.length} publicaciones satisface ${f(totalSpent(next))}-DP pura (bajo supuestos).`,
+      privacyGuarantee: `El conjunto de las ${next.entries.length} publicaciones satisface ${f(totalSpent(next))}-DP pura (bajo supuestos). Esta consulta: ε = ${p.epsilon}.`,
+      privacy: privacyRecord(compositionSpec(), { status: 'pure', epsilon: p.epsilon }),
     });
   };
 
@@ -304,6 +307,21 @@ export default function DP4Composition() {
             <StatTile label="Consultas" value={ledger.entries.length} />
             <StatTile label="ε total gastado" value={f(spent)} tone="dp" sub={`de ${f(ledger.limit)}`} />
           </div>
+          <PrivacyModelCard
+            spec={compositionSpec()}
+            compact
+            extra={
+              <div className="space-y-1 text-xs">
+                <p className="flex flex-wrap items-center gap-2">
+                  <IntegrityBadge kind="formal" />
+                  <span className="num font-semibold text-dp">Presupuesto compuesto: ε_total = Σεᵢ = {f(spent)} (ε-DP puro, δ = 0)</span>
+                </p>
+                <p>
+                  El registro usa vecindad por <strong>reemplazo</strong> con N = {N} público: conteos Δ₁ = 1 y media acotada Δ₁ = (U − L)/N. Cada consulta individual cumple su εᵢ; el conjunto de todas, la suma.
+                </p>
+              </div>
+            }
+          />
           <Callout kind="info" title="Una consulta frente a varias">
             Cada publicación individual cumple su propio εᵢ, pero el conjunto de todas solo garantiza Σεᵢ = {f(spent)}. Lo que importa para la persona es la pérdida acumulada.
           </Callout>

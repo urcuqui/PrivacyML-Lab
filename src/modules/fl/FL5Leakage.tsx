@@ -165,7 +165,7 @@ export default function FL5Leakage() {
               min={0}
               max={1}
               step={0.005}
-              help="Desviación típica por coordenada añadida al gradiente medio. Ilustrativo: sin recorte ni contabilidad no es DP formal."
+              help="Desviación típica por coordenada añadida al gradiente medio. Solo ilustra cómo el ruido dificulta la inferencia: sin recorte, sin calibración a una sensibilidad y sin contabilidad NO es privacidad diferencial y no se muestra ningún ε."
             />
           </ConfigSection>
           <ConfigSection title="B · Inferencia entre clientes">
@@ -345,7 +345,7 @@ export default function FL5Leakage() {
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
                 {params.secAgg
-                  ? 'Cada par de clientes (i, j) comparte una máscara aleatoria r_ij: i suma r_ij y j la resta. Individualmente los vectores parecen ruido, pero la suma coincide con la real (salvo redondeo). El servidor sigue viendo la suma y el modelo resultante.'
+                  ? 'Cada par de clientes (i, j) comparte una máscara aleatoria r_ij: i suma r_ij y j la resta. Individualmente los vectores parecen ruido, pero la suma coincide con la real (salvo redondeo). El servidor deja de ver cada actualización individual, pero sigue viendo la suma y el modelo resultante: lo que estos revelen no queda protegido.'
                   : 'Activa «Agregación segura (conceptual)» para ver cómo las máscaras por pares ocultan cada actualización individual sin cambiar la suma.'}
               </p>
               <Callout kind="warn" className="mt-2" title="No es un protocolo criptográfico">
@@ -358,14 +358,14 @@ export default function FL5Leakage() {
                 {
                   Icon: Lock,
                   title: 'Agregación segura',
-                  protects: 'Oculta al servidor cada actualización individual: solo ve la suma de un grupo suficientemente grande de clientes.',
+                  protects: 'Oculta al servidor cada actualización individual: solo ve la suma de un grupo suficientemente grande de clientes. Combinada con ruido distribuido entre clientes, reduce la confianza necesaria en el servidor.',
                   not: 'No protege lo que revela la suma ni el modelo final; con pocos clientes, o si el servidor manipula la participación, la suma puede aislar a uno. No limita la memorización.',
                 },
                 {
                   Icon: ShieldCheck,
                   title: 'Privacidad diferencial',
                   protects: 'Con recorte + ruido calibrado y un contador válido, acota formalmente cuánto influye una unidad (registro o cliente) en lo que se publica, incluido el modelo final.',
-                  not: 'No oculta las actualizaciones si el ruido lo añade el servidor (DP central). Reduce utilidad. La garantía depende de la unidad elegida, de los supuestos y de la contabilidad.',
+                  not: 'Con DP central el servidor recibe y ve cada actualización individual ANTES de añadir el ruido: la garantía protege frente a quien observa los modelos publicados, no frente al servidor. Reduce utilidad. Depende de la unidad elegida, de la vecindad, de los supuestos y de la contabilidad.',
                 },
                 {
                   Icon: Cpu,

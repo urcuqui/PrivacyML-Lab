@@ -34,6 +34,34 @@ export interface FederatedDataConfig {
   /** Tamaño del conjunto de evaluación global fijo. */
   globalTestSize: number;
   seed: number;
+  /** Tamaño del conjunto de REFERENCIA común (por defecto = globalTestSize). */
+  referenceTestSize?: number;
+  /** Semilla del conjunto de referencia (por defecto REFERENCE_SEED). Independiente de `seed` y del modo. */
+  referenceSeed?: number;
+}
+
+/** Semilla fija del conjunto de referencia común. */
+export const REFERENCE_SEED = 20_240_601;
+
+/**
+ * POBLACIÓN OBJETIVO DE REFERENCIA (documentada):
+ * pacientes de toda la región atendida por la red, con clases equilibradas (P(y = 1) = 0,5) y sin
+ * desplazamiento de características (mismo generador `generateBlobs`, shift = 0).
+ * - Es independiente del modo (IID / Non-IID), del número de clientes, del desequilibrio y del
+ *   desplazamiento configurados, y se genera con su propia semilla ⇒ idéntica en todas las
+ *   configuraciones comparadas y disjunta de los datos de entrenamiento.
+ * - Coincide con la distribución de entrenamiento del escenario IID: eso es una elección explícita
+ *   ("queremos un modelo para la población general") y puede favorecer al escenario IID.
+ */
+export const REFERENCE_POPULATION = {
+  pPositive: 0.5,
+  shift: [0, 0] as [number, number],
+  description: 'Población general de la región: clases equilibradas (50 % riesgo alto) y sin desplazamiento de características.',
+};
+
+export function generateReferenceTest(size: number, seed: number = REFERENCE_SEED): Sample[] {
+  const rng = createSeededRng(deriveSeed(seed, 'reference-test'));
+  return generateBlobs(size, rng, { pPositive: REFERENCE_POPULATION.pPositive, shift: REFERENCE_POPULATION.shift });
 }
 
 export interface ClientData {
@@ -48,7 +76,10 @@ export interface ClientData {
 
 export interface FederatedData {
   clients: ClientData[];
+  /** Evaluación del ESCENARIO: mezcla equilibrada de las distribuciones de sus clientes. */
   globalTest: Sample[];
+  /** Evaluación de REFERENCIA común: población objetivo fija (ver REFERENCE_POPULATION). */
+  referenceTest: Sample[];
   config: FederatedDataConfig;
 }
 
@@ -125,7 +156,8 @@ export function generateFederatedData(config: FederatedDataConfig): FederatedDat
     const { pPositive, shift } = clientDistribution(k, config);
     globalTest.push(...generateBlobs(per, testRng, { pPositive, shift }));
   }
-  return { clients, globalTest, config };
+  const referenceTest = generateReferenceTest(config.referenceTestSize ?? config.globalTestSize, config.referenceSeed ?? REFERENCE_SEED);
+  return { clients, globalTest, referenceTest, config };
 }
 
 export function pooledTrain(data: FederatedData): Sample[] {

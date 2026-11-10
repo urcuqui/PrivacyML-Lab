@@ -30,6 +30,10 @@ npm run preview    # serve the production build locally
 
 ---
 
+## Companion notebook
+
+[`notebooks/Privacy_Preserving_Machine_Learning_Hands_On.ipynb`](notebooks/Privacy_Preserving_Machine_Learning_Hands_On.ipynb) is a self-contained Jupyter notebook for a 90–120-minute guided session. It covers DP, FedAvg, Non-IID data, gradient leakage, DP aggregation, secure aggregation and agentic AI, using only NumPy, pandas, Matplotlib and scikit-learn, and is saved with its outputs. It does not need this web app. See [`notebooks/README.md`](notebooks/README.md) for how to run it.
+
 ## Architecture
 
 ```

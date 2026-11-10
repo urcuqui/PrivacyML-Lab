@@ -1,0 +1,6 @@
+# Dependencias del notebook Privacy_Preserving_Machine_Learning_Hands_On.ipynb (Python 3.11+)
+numpy>=1.26
+pandas>=2.1
+matplotlib>=3.8
+scikit-learn>=1.4
+jupyterlab>=4.0   # o cualquier entorno compatible con Jupyter (VS Code, Colab…)
